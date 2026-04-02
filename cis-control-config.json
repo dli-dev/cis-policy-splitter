@@ -1,0 +1,305 @@
+{
+  "skipFiles": [
+    "CIS (L1) Windows Update (103) - Windows 11 Intune 4.0.0 "
+  ],
+  "autopilotPolicies": [
+    "CIS (L1) Autopilot - Windows 11 Intune 4.0.0"
+  ],
+  "scopeTags": {
+    "readonly": "001-readonly",
+    "exceptionable": "001"
+  },
+  "doNotDeploy": ["49.9", "49.10"],
+  "controls": {
+
+    "_comment_exceptionable": "=== EXCEPTIONABLE — Settings Catalog (13 settings, 14 entries counting paired 26.7+49.8) ===",
+
+    "26.7": {
+      "disposition": "exceptionable",
+      "description": "Max Inactivity Time Device Lock (child of Device Lock)",
+      "settingDefinitionId": "device_vendor_msft_policy_config_devicelock_maxinactivitytimedevicelock",
+      "isChild": true,
+      "alternatives": [
+        {
+          "name": "30min",
+          "description": "30 minutes inactivity timeout",
+          "settingValue": { "value": 30 }
+        },
+        {
+          "name": "disabled",
+          "description": "Disabled (no auto-lock)",
+          "settingValue": { "value": 0 }
+        }
+      ]
+    },
+    "49.8": {
+      "disposition": "exceptionable",
+      "description": "Interactive Logon Machine Inactivity Limit",
+      "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_interactivelogon_machineinactivitylimit_v2",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "30min",
+          "description": "30 minutes (1800 seconds)",
+          "settingValue": { "value": 1800 }
+        },
+        {
+          "name": "disabled",
+          "description": "Disabled (no auto-lock)",
+          "settingValue": { "value": 0 }
+        }
+      ]
+    },
+    "49.1": {
+      "disposition": "exceptionable",
+      "description": "Guest Account Status",
+      "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_enableguestaccountstatus",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "enabled",
+          "description": "Guest account enabled",
+          "settingValue": { "value": "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_enableguestaccountstatus_1" }
+        }
+      ]
+    },
+    "49.4": {
+      "disposition": "exceptionable",
+      "description": "Rename Guest Account",
+      "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_renameguestaccount",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "not-renamed",
+          "description": "Guest account not renamed (default name)",
+          "settingValue": { "value": "Guest" }
+        }
+      ]
+    },
+    "4.4.2": {
+      "disposition": "exceptionable",
+      "description": "Configure SMBv1 Client Driver",
+      "settingDefinitionId": "device_vendor_msft_policy_config_mssecurityguide_configuresmbv1clientdriver",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "enabled",
+          "description": "SMBv1 client driver enabled",
+          "settingValue": { "value": "device_vendor_msft_policy_config_mssecurityguide_configuresmbv1clientdriver_0" }
+        }
+      ]
+    },
+    "4.6.9.1": {
+      "disposition": "exceptionable",
+      "description": "Prohibit Installation and Configuration of Network Bridge",
+      "settingDefinitionId": "device_vendor_msft_policy_config_connectivity_prohibitinstallationandconfigurationofnetworkbridge",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "allowed",
+          "description": "Network Bridge installation allowed",
+          "settingValue": { "value": "device_vendor_msft_policy_config_connectivity_prohibitinstallationandconfigurationofnetworkbridge_0" }
+        }
+      ]
+    },
+    "4.10.9.1.3": {
+      "disposition": "exceptionable",
+      "description": "Prevent Installation of Matching Device Setup Classes (IEEE 1394)",
+      "settingDefinitionId": "device_vendor_msft_policy_config_deviceinstallation_preventinstallationofmatchingdevicesetupclasses",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "allowed",
+          "description": "IEEE 1394 device installation allowed (COSU)",
+          "settingValue": { "value": "device_vendor_msft_policy_config_deviceinstallation_preventinstallationofmatchingdevicesetupclasses_0" }
+        }
+      ]
+    },
+    "4.10.9.2": {
+      "disposition": "exceptionable",
+      "description": "Prevent Device Metadata Retrieval from Network",
+      "settingDefinitionId": "device_vendor_msft_policy_config_deviceinstallation_preventdevicemetadatafromnetwork",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "allowed",
+          "description": "Device metadata retrieval allowed",
+          "settingValue": { "value": "device_vendor_msft_policy_config_deviceinstallation_preventdevicemetadatafromnetwork_0" }
+        }
+      ]
+    },
+    "4.10.26.2": {
+      "disposition": "exceptionable",
+      "description": "Do Not Display Network Selection UI at Logon",
+      "settingDefinitionId": "device_vendor_msft_policy_config_windowslogon_dontdisplaynetworkselectionui",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "visible",
+          "description": "Network selection UI visible at logon (COSU)",
+          "settingValue": { "value": "device_vendor_msft_policy_config_windowslogon_dontdisplaynetworkselectionui_0" }
+        }
+      ]
+    },
+    "4.11.36.4.2.1": {
+      "disposition": "exceptionable",
+      "description": "Allow Users to Connect Remotely (RDP)",
+      "settingDefinitionId": "device_vendor_msft_policy_config_remotedesktopservices_allowuserstoconnectremotely",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "enabled",
+          "description": "RDP connections enabled",
+          "settingValue": { "value": "device_vendor_msft_policy_config_remotedesktopservices_allowuserstoconnectremotely_1" }
+        }
+      ]
+    },
+    "68.2": {
+      "disposition": "exceptionable",
+      "description": "Allow Input Personalization",
+      "settingDefinitionId": "device_vendor_msft_policy_config_privacy_allowinputpersonalization",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "allow",
+          "description": "Input personalization allowed",
+          "settingValue": { "value": "device_vendor_msft_policy_config_privacy_allowinputpersonalization_1" }
+        }
+      ]
+    },
+    "89.10": {
+      "disposition": "exceptionable",
+      "description": "Create Symbolic Links",
+      "settingDefinitionId": "device_vendor_msft_policy_config_userrights_createsymboliclinks",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "admins-hyperv",
+          "description": "Administrators + Hyper-V Virtual Machines",
+          "settingValue": { "value": ["*S-1-5-32-544", "*S-1-5-83-0"] }
+        }
+      ]
+    },
+    "89.12": {
+      "disposition": "exceptionable",
+      "description": "Debug Programs",
+      "settingDefinitionId": "device_vendor_msft_policy_config_userrights_debugprograms",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "admins-debuggers",
+          "description": "Administrators + Debugger Users (SID must be set per-org)",
+          "settingValue": null
+        }
+      ]
+    },
+    "89.14": {
+      "disposition": "exceptionable",
+      "description": "Deny Local Log On",
+      "settingDefinitionId": "device_vendor_msft_policy_config_userrights_denylocallogon",
+      "isChild": false,
+      "alternatives": [
+        {
+          "name": "none",
+          "description": "No users denied local logon (COSU)",
+          "settingValue": { "value": [] }
+        }
+      ]
+    },
+
+    "_comment_reject": "=== REJECT — strip from policies (Settings Catalog only; 81.x service scripts omitted) ===",
+
+    "55.5": {
+      "disposition": "reject",
+      "description": "Disable Store Originated Apps",
+      "settingDefinitionId": "device_vendor_msft_policy_config_applicationmanagement_disablestoreoriginatedapps",
+      "isChild": false,
+      "reason": "Breaks Company Portal app deployment"
+    },
+    "76.1.2": {
+      "disposition": "reject",
+      "description": "Notify Password Reuse (Enhanced Phishing Protection)",
+      "settingDefinitionId": "device_vendor_msft_policy_config_webthreatdefense_notifymalicious",
+      "isChild": false,
+      "reason": "Breaks WebLogin; pending WHfB migration"
+    },
+    "80.5": {
+      "disposition": "reject",
+      "description": "Disable OneDrive File Sync",
+      "settingDefinitionId": "device_vendor_msft_policy_config_system_disableonedrivefilesync",
+      "isChild": false,
+      "reason": "OneDrive required; researching tenant-scoped restrictions"
+    },
+    "12.1": {
+      "disposition": "reject",
+      "description": "Allow Camera",
+      "settingDefinitionId": "device_vendor_msft_policy_config_camera_allowcamera",
+      "isChild": false,
+      "reason": "Blocks Teams/Zoom video"
+    },
+    "4.11.7.2.9": {
+      "disposition": "reject",
+      "description": "Require Additional Authentication at Startup (BitLocker)",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrequirestartupauthentication",
+      "isChild": false,
+      "reason": "TPM startup PIN breaks Autopilot/silent BitLocker"
+    },
+    "4.11.7.2.12": {
+      "disposition": "reject",
+      "description": "Configure TPM Startup PIN (BitLocker)",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrequirestartupauthentication_configurepinusagedropdown_name",
+      "isChild": true,
+      "reason": "TPM startup PIN breaks Autopilot/silent BitLocker"
+    },
+    "4.11.7.2.13": {
+      "disposition": "reject",
+      "description": "Configure TPM Startup (BitLocker)",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrequirestartupauthentication_configuretpmusagedropdown_name",
+      "isChild": true,
+      "reason": "TPM startup PIN breaks Autopilot/silent BitLocker"
+    },
+
+    "_comment_na": "=== NOT APPLICABLE — strip from policies ===",
+
+    "4.11.7.1.5": {
+      "disposition": "na",
+      "description": "BitLocker Fixed Drive: Allow Data Recovery Agent",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_fixeddrivesrecoveryoptions_fdvallowdra_name",
+      "isChild": true,
+      "reason": "No on-prem AD DS"
+    },
+    "4.11.7.2.5": {
+      "disposition": "na",
+      "description": "BitLocker OS Drive: Allow Data Recovery Agent",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrecoveryoptions_osallowdra_name",
+      "isChild": true,
+      "reason": "No on-prem AD DS"
+    },
+    "4.11.7.2.6": {
+      "disposition": "na",
+      "description": "BitLocker OS Drive: AD DS Backup Dropdown",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrecoveryoptions_osactivedirectorybackupdropdown_name",
+      "isChild": true,
+      "reason": "No on-prem AD DS"
+    },
+    "4.11.7.2.8": {
+      "disposition": "na",
+      "description": "BitLocker OS Drive: Hide Recovery Page",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrecoveryoptions_oshiderecoverypage_name",
+      "isChild": true,
+      "reason": "No on-prem AD DS"
+    },
+
+    "_comment_modified": "=== MODIFIED — deploy with non-CIS value ===",
+
+    "49.29": {
+      "disposition": "modified",
+      "description": "UAC Standard User Elevation Prompt Behavior",
+      "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_useraccountcontrol_behavioroftheelevationpromptforstandardusers",
+      "isChild": false,
+      "cisValue": "Automatically deny elevation requests",
+      "ourValue": "Prompt for credentials on the secure desktop",
+      "modifiedValue": "device_vendor_msft_policy_config_localpoliciessecurityoptions_useraccountcontrol_behavioroftheelevationpromptforstandardusers_1"
+    }
+  }
+}
