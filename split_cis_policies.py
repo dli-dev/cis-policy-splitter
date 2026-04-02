@@ -25,9 +25,6 @@ def load_config(config_path: str) -> tuple[dict, dict]:
     with open(config_path, encoding="utf-8-sig") as f:
         config = json.load(f)
 
-    # Build doNotDeploy set for treating as rejects
-    do_not_deploy = set(config.get("doNotDeploy", []))
-
     lookup = {}
     controls = config.get("controls", {})
     for cis_rec, ctrl in controls.items():

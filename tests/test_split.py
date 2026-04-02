@@ -43,15 +43,16 @@ def test_load_config_builds_lookup():
     assert sid_26_7 in lookup
     assert lookup[sid_26_7]["is_child"] is True
 
-    # doNotDeploy should be treated as rejects
-    sid_49_9 = None
-    for sid, ctrl in lookup.items():
-        if ctrl["cis_rec"] == "49.9":
-            sid_49_9 = sid
-            break
-    # 49.9 and 49.10 are in doNotDeploy but have no settingDefinitionId in config,
-    # so they won't appear in the lookup. The script handles doNotDeploy by CIS rec#.
-    # This is fine — they'll be dropped by the per-file processing.
+    # doNotDeploy controls (49.9, 49.10) should be in lookup as rejects
+    sid_49_9 = "device_vendor_msft_policy_config_localpoliciessecurityoptions_interactivelogon_messagetextforusersattemptingtologon"
+    assert sid_49_9 in lookup
+    assert lookup[sid_49_9]["disposition"] == "reject"
+    assert lookup[sid_49_9]["cis_rec"] == "49.9"
+
+    sid_49_10 = "device_vendor_msft_policy_config_localpoliciessecurityoptions_interactivelogon_messagetitleforusersattemptingtologon"
+    assert sid_49_10 in lookup
+    assert lookup[sid_49_10]["disposition"] == "reject"
+    assert lookup[sid_49_10]["cis_rec"] == "49.10"
 
 
 def test_load_config_skip_files():

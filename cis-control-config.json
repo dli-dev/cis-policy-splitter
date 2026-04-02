@@ -10,6 +10,7 @@
     "exceptionable": "001"
   },
   "doNotDeploy": ["49.9", "49.10"],
+  "_doNotDeploy_note": "49.9 and 49.10 are also in controls as rejects so the splitter drops them",
   "controls": {
 
     "_comment_exceptionable": "=== EXCEPTIONABLE — Settings Catalog (13 settings, 14 entries counting paired 26.7+49.8) ===",
@@ -257,6 +258,21 @@
       "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrequirestartupauthentication_configuretpmusagedropdown_name",
       "isChild": true,
       "reason": "TPM startup PIN breaks Autopilot/silent BitLocker"
+    },
+
+    "49.9": {
+      "disposition": "reject",
+      "description": "Interactive Logon Message Text",
+      "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_interactivelogon_messagetextforusersattemptingtologon",
+      "isChild": false,
+      "reason": "Pending legal review of message content"
+    },
+    "49.10": {
+      "disposition": "reject",
+      "description": "Interactive Logon Message Title",
+      "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_interactivelogon_messagetitleforusersattemptingtologon",
+      "isChild": false,
+      "reason": "Pending legal review of message content"
     },
 
     "_comment_na": "=== NOT APPLICABLE — strip from policies ===",
