@@ -48,15 +48,15 @@ $ErrorActionPreference = 'Stop'
 # 1. Resolve policy file list
 # ---------------------------------------------------------------------------
 if ($PSCmdlet.ParameterSetName -eq 'Files') {
-    $policyFiles = @()
+    $deployItems = @()
     foreach ($f in $PolicyFile) {
         if (-not (Test-Path $f)) {
             Write-Error "Policy file not found: $f"
             return
         }
-        $policyFiles += (Resolve-Path $f).Path
+        $deployItems += @{ File = (Resolve-Path $f).Path; AssignTo = $null }
     }
-    Write-Host "Deploying $($policyFiles.Count) policy file(s)" -ForegroundColor Gray
+    Write-Host "Deploying $($deployItems.Count) policy file(s)" -ForegroundColor Gray
 } else {
     if (-not (Test-Path $ManifestFile)) {
         Write-Error "Manifest not found: $ManifestFile. Run split_cis_policies.py first."
@@ -67,11 +67,14 @@ if ($PSCmdlet.ParameterSetName -eq 'Files') {
     $manifest = $manifestRaw | ConvertFrom-Json
 
     $manifestDir = Split-Path $ManifestFile -Parent
-    $policyFiles = @()
+    $deployItems = @()
     foreach ($entry in $manifest) {
-        $policyFiles += (Join-Path $manifestDir $entry.file)
+        $deployItems += @{
+            File     = (Join-Path $manifestDir $entry.file)
+            AssignTo = if ($entry.PSObject.Properties['assignTo']) { $entry.assignTo } else { $null }
+        }
     }
-    Write-Host "Loaded manifest: $($policyFiles.Count) policies" -ForegroundColor Gray
+    Write-Host "Loaded manifest: $($deployItems.Count) policies" -ForegroundColor Gray
 }
 
 # ---------------------------------------------------------------------------
@@ -106,7 +109,37 @@ function Resolve-ScopeTagId {
 }
 
 # ---------------------------------------------------------------------------
-# 3. Policy creation
+# 3. Group resolution cache
+# ---------------------------------------------------------------------------
+$groupCache = @{}
+
+function Resolve-GroupId {
+    param([string]$GroupName)
+    if ($groupCache.ContainsKey($GroupName)) { return $groupCache[$GroupName] }
+
+    if ($WhatIfPreference) {
+        $groupCache[$GroupName] = "WHATIF-$GroupName"
+        return "WHATIF-$GroupName"
+    }
+
+    try {
+        $encodedName = $GroupName -replace "'", "''"
+        $uri = "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$encodedName'&`$select=id,displayName"
+        $response = Invoke-MgGraphRequest -Method GET -Uri $uri
+        if ($response.value -and $response.value.Count -gt 0) {
+            $id = $response.value[0].id.ToString()
+            $groupCache[$GroupName] = $id
+            Write-Host "  Resolved group '$GroupName' -> ID $id" -ForegroundColor Gray
+            return $id
+        }
+    } catch {}
+
+    Write-Warning "Group '$GroupName' not found. Skipping assignment."
+    return $null
+}
+
+# ---------------------------------------------------------------------------
+# 4. Policy creation and assignment
 # ---------------------------------------------------------------------------
 function Find-ExistingPolicy {
     param([string]$PolicyName)
@@ -121,13 +154,14 @@ function Find-ExistingPolicy {
 }
 
 function New-IntunePolicy {
-    param([hashtable]$PolicyBody)
+    param([hashtable]$PolicyBody, [string]$AssignTo)
 
     $policyName = $PolicyBody.name
-    $result = @{ Name = $policyName; Id = $null; Created = $false; Skipped = $false; Error = $null }
+    $result = @{ Name = $policyName; Id = $null; Created = $false; Skipped = $false; Assigned = $false; Error = $null }
 
     if ($WhatIfPreference) {
-        Write-Host "  [WhatIf] Would create: $policyName" -ForegroundColor DarkYellow
+        $assignMsg = if ($AssignTo) { " (assign: $AssignTo)" } else { "" }
+        Write-Host "  [WhatIf] Would create: $policyName$assignMsg" -ForegroundColor DarkYellow
         $result.Id = 'WHATIF-ID'
         return $result
     }
@@ -147,13 +181,37 @@ function New-IntunePolicy {
     } catch {
         $result.Error = $_.Exception.Message
         Write-Warning "Failed to create '$policyName': $($_.Exception.Message)"
+        return $result
+    }
+
+    # Assign to group if specified
+    if ($AssignTo -and $result.Id) {
+        $gid = Resolve-GroupId -GroupName $AssignTo
+        if ($gid) {
+            try {
+                $assignBody = @{
+                    assignments = @(@{
+                        target = @{
+                            '@odata.type' = '#microsoft.graph.groupAssignmentTarget'
+                            groupId       = $gid
+                        }
+                    })
+                }
+                Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assign" -Body ($assignBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
+                $result.Assigned = $true
+                Write-Host "  ASSIGNED: $policyName -> $AssignTo" -ForegroundColor Green
+            } catch {
+                Write-Warning "Failed to assign '$policyName': $($_.Exception.Message)"
+                $result.Error = "Assignment failed: $($_.Exception.Message)"
+            }
+        }
     }
 
     return $result
 }
 
 # ---------------------------------------------------------------------------
-# 4. Connect to Graph
+# 5. Connect to Graph
 # ---------------------------------------------------------------------------
 $tenantDomain = switch ($Tenant) {
     'QA'   { 'utorontoqa.onmicrosoft.com' }
@@ -161,23 +219,44 @@ $tenantDomain = switch ($Tenant) {
 }
 
 if (-not $WhatIfPreference) {
-    $requiredScope = "DeviceManagementConfiguration.ReadWrite.All"
+    $requiredScopes = "DeviceManagementConfiguration.ReadWrite.All", "Group.Read.All"
     Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
     Write-Host "Connecting to Microsoft Graph ($Tenant`: $tenantDomain)..." -ForegroundColor White
-    Connect-MgGraph -Scopes $requiredScope -TenantId $tenantDomain -ContextScope Process -ErrorAction Stop
+    Connect-MgGraph -Scopes $requiredScopes -TenantId $tenantDomain -ContextScope Process -ErrorAction Stop
     Write-Host "Connected as $((Get-MgContext).Account) [$Tenant]" -ForegroundColor Green
 } else {
     Write-Host "[WhatIf] Would connect to Microsoft Graph ($Tenant`: $tenantDomain)" -ForegroundColor DarkYellow
 }
 
 # ---------------------------------------------------------------------------
-# 5. Deploy each policy
+# 6. Confirmation
+# ---------------------------------------------------------------------------
+$assignGroups = @($deployItems | Where-Object { $_.AssignTo } | ForEach-Object { $_.AssignTo } | Select-Object -Unique)
+Write-Host "`n=== Deployment Plan ===" -ForegroundColor White
+Write-Host "  Tenant:   $Tenant ($tenantDomain)" -ForegroundColor White
+Write-Host "  Policies: $($deployItems.Count)" -ForegroundColor White
+if ($assignGroups.Count -gt 0) {
+    Write-Host "  Assign to: $($assignGroups -join ', ')" -ForegroundColor Cyan
+} else {
+    Write-Host "  Assign to: (none)" -ForegroundColor Gray
+}
+
+if (-not $WhatIfPreference) {
+    $confirm = Read-Host "`nProceed? (y/N)"
+    if ($confirm -ne 'y') {
+        Write-Host "Aborted." -ForegroundColor Yellow
+        return
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 7. Deploy each policy
 # ---------------------------------------------------------------------------
 $stats = @{ Created = 0; Skipped = 0; Failed = 0 }
 $deploymentLog = [System.Collections.ArrayList]::new()
 
-foreach ($filePath in $policyFiles) {
-    $raw = Get-Content $filePath -Encoding UTF8 -Raw
+foreach ($item in $deployItems) {
+    $raw = Get-Content $item.File -Encoding UTF8 -Raw
     if ($raw[0] -eq [char]0xFEFF) { $raw = $raw.Substring(1) }
     $policyBody = $raw | ConvertFrom-Json -AsHashtable
 
@@ -189,11 +268,12 @@ foreach ($filePath in $policyFiles) {
     $policyBody.roleScopeTagIds = $resolvedTags
 
     Write-Host "`n$($policyBody.name)" -ForegroundColor White
-    $result = New-IntunePolicy -PolicyBody $policyBody
+    $result = New-IntunePolicy -PolicyBody $policyBody -AssignTo $item.AssignTo
 
     [void]$deploymentLog.Add([ordered]@{
-        name = $result.Name; id = $result.Id; file = $filePath
-        created = $result.Created; skipped = $result.Skipped; error = $result.Error
+        name = $result.Name; id = $result.Id; file = $item.File
+        assignTo = $item.AssignTo; created = $result.Created
+        skipped = $result.Skipped; assigned = $result.Assigned; error = $result.Error
     })
 
     if ($result.Created) { $stats.Created++ }
@@ -202,7 +282,7 @@ foreach ($filePath in $policyFiles) {
 }
 
 # ---------------------------------------------------------------------------
-# 6. Write deployment log and summary
+# 8. Write deployment log and summary
 # ---------------------------------------------------------------------------
 if (-not $WhatIfPreference -and $deploymentLog.Count -gt 0) {
     $deployedBy = try { (Get-MgContext).Account } catch { $env:USERNAME }
@@ -232,4 +312,5 @@ Write-Host "`n=== Deployment Summary ===" -ForegroundColor White
 Write-Host "  Created:    $($stats.Created)" -ForegroundColor Green
 Write-Host "  Skipped:    $($stats.Skipped) (already exist)" -ForegroundColor Yellow
 Write-Host "  Failed:     $($stats.Failed)" -ForegroundColor $(if ($stats.Failed -gt 0) { 'Red' } else { 'Gray' })
-Write-Host "  Unassigned: policies were created without assignments" -ForegroundColor Gray
+$assigned = @($deploymentLog | Where-Object { $_.assigned }).Count
+Write-Host "  Assigned:   $assigned" -ForegroundColor $(if ($assigned -gt 0) { 'Cyan' } else { 'Gray' })

@@ -277,8 +277,14 @@ def swap_alt_value(setting: dict, alt: dict, target_child_sid: str = None) -> di
 
     if "ChoiceSettingInstance" in odata_type:
         target["choiceSettingValue"]["value"] = value
+        # If alt specifies children (including empty list), override them
+        if "children" in alt_value:
+            target["choiceSettingValue"]["children"] = alt_value["children"]
 
     elif "SimpleSettingCollectionInstance" in odata_type:
+        if not value:
+            # Empty collection not allowed by Graph API — skip this alt
+            return swapped
         target["simpleSettingCollectionValue"] = [
             {
                 "@odata.type": "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
@@ -357,6 +363,7 @@ def process_file(
     config: dict,
     lookup: dict,
     output_dir: str,
+    assignment_group: str | None = None,
     dry_run: bool = False,
 ) -> list[dict]:
     """Process a single CIS Build Kit JSON file.
@@ -407,6 +414,7 @@ def process_file(
         manifest_entries.append({
             "file": rel_path,
             "type": policy_type,
+            "assignTo": assignment_group,
         })
 
     # --- Write exceptionable + alternatives ---
@@ -433,6 +441,7 @@ def process_file(
         manifest_entries.append({
             "file": rel_path,
             "type": "exceptionable",
+            "assignTo": assignment_group,
         })
 
         # Alternatives
@@ -474,6 +483,7 @@ def process_file(
             manifest_entries.append({
                 "file": rel_path,
                 "type": "alternative",
+                "assignTo": None,
             })
 
     return manifest_entries
@@ -499,13 +509,17 @@ def main(
         print(f"No JSON files found at: {path}")
         return
 
+    assignment_group = config.get("assignmentGroup")
+
     print(f"Loaded config: {len(lookup)} controls")
+    if assignment_group:
+        print(f"Assignment group: {assignment_group}")
     print(f"Found {len(json_files)} JSON file(s)")
 
     all_manifest = []
 
     for jf in json_files:
-        entries = process_file(str(jf), config, lookup, output_dir, dry_run)
+        entries = process_file(str(jf), config, lookup, output_dir, assignment_group, dry_run)
         all_manifest.extend(entries)
 
     # Write manifest

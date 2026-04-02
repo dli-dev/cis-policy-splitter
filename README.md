@@ -43,10 +43,13 @@ python3 -m venv .venv
   --output ./output
 
 # Phase 2: Deploy to Intune (dry run first)
-pwsh Deploy-CISPolicies.ps1 -OutputDir ./output -WhatIf
+pwsh Deploy-CISPolicies.ps1 -Tenant QA -ManifestFile ./output/manifest.json -WhatIf
 
 # Phase 2: Deploy for real
-pwsh Deploy-CISPolicies.ps1 -OutputDir ./output
+pwsh Deploy-CISPolicies.ps1 -Tenant Prod -ManifestFile ./output/manifest.json
+
+# Deploy specific policies only
+pwsh Deploy-CISPolicies.ps1 -Tenant QA -PolicyFile 'output/baseline/CIS L1 - Auditing.json'
 ```
 
 ## Background
@@ -113,7 +116,7 @@ output/
     └── ...
 ```
 
-Each manifest entry specifies `file`, `type` (baseline/autopilot/exceptionable/alternative), and `assignTo` (AllDevices/AllUsers/None).
+Each manifest entry specifies `file`, `type` (baseline/autopilot/exceptionable/alternative), and `assignTo` (group name or null for alternatives).
 
 ## Config File
 
@@ -172,4 +175,18 @@ Any `settingDefinitionId` not in the config defaults to "accept".
 | `cis-control-decisions.md` | Human-readable decision log with rationale |
 | `build-setting-id-map.py` | One-time helper to map CIS rec# → settingDefinitionId |
 | `IntuneWindows11v4.0.0/` | CIS Build Kit v4.0.0 source files |
+| `Get-GroupPolicyAssignments.ps1` | List policies assigned to a security group |
+| `Get-IntunePolicy.ps1` | Retrieve a policy from Intune by name (debug) |
 | `docs/plans/` | Design doc and implementation plan |
+
+## Claude Code Skill
+
+The `intune-deploy-fix-loop` skill (in `~/.claude/skills/`) automates the full update pipeline with Claude Code:
+
+1. Give Claude a new `cis-control-decisions.md` and/or CIS Build Kit
+2. Claude updates `cis-control-config.json`, querying Graph API setting definitions for valid options
+3. Runs the splitter and deploys to QA
+4. Iterates on Graph API errors — captures full error bodies, diagnoses root causes, fixes config, retries
+5. Hands off to you for portal verification and Prod deployment
+
+Common errors the loop handles: missing required child settings (BitLocker DRA), invalid children on disabled choices, empty collection values.

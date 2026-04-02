@@ -9,6 +9,7 @@
     "readonly": "001-readonly",
     "exceptionable": "001"
   },
+  "assignmentGroup": "001i-test-security-baseline",
   "doNotDeploy": ["49.9", "49.10"],
   "_doNotDeploy_note": "49.9 and 49.10 are also in controls as rejects so the splitter drops them",
   "controls": {
@@ -86,7 +87,7 @@
         {
           "name": "enabled",
           "description": "SMBv1 client driver enabled",
-          "settingValue": { "value": "device_vendor_msft_policy_config_mssecurityguide_configuresmbv1clientdriver_0" }
+          "settingValue": { "value": "device_vendor_msft_policy_config_mssecurityguide_configuresmbv1clientdriver_0", "children": [] }
         }
       ]
     },
@@ -112,7 +113,7 @@
         {
           "name": "allowed",
           "description": "IEEE 1394 device installation allowed (COSU)",
-          "settingValue": { "value": "device_vendor_msft_policy_config_deviceinstallation_preventinstallationofmatchingdevicesetupclasses_0" }
+          "settingValue": { "value": "device_vendor_msft_policy_config_deviceinstallation_preventinstallationofmatchingdevicesetupclasses_0", "children": [] }
         }
       ]
     },
@@ -199,14 +200,9 @@
       "description": "Deny Local Log On",
       "settingDefinitionId": "device_vendor_msft_policy_config_userrights_denylocallogon",
       "isChild": false,
-      "alternatives": [
-        {
-          "name": "none",
-          "description": "No users denied local logon (COSU)",
-          "settingValue": { "value": [] }
-        }
-      ]
+      "alternatives": []
     },
+    "_89.14_note": "No alt for 89.14: Graph API rejects empty simpleSettingCollectionValue",
 
     "_comment_reject": "=== REJECT — strip from policies (Settings Catalog only; 81.x service scripts omitted) ===",
 
@@ -278,32 +274,32 @@
     "_comment_na": "=== NOT APPLICABLE — strip from policies ===",
 
     "4.11.7.1.5": {
-      "disposition": "na",
+      "disposition": "accept",
       "description": "BitLocker Fixed Drive: Allow Data Recovery Agent",
       "settingDefinitionId": "device_vendor_msft_bitlocker_fixeddrivesrecoveryoptions_fdvallowdra_name",
       "isChild": true,
-      "reason": "No on-prem AD DS"
+      "_note": "Changed from na to accept — Graph API requires this child when parent is enabled"
     },
     "4.11.7.2.5": {
-      "disposition": "na",
+      "disposition": "accept",
       "description": "BitLocker OS Drive: Allow Data Recovery Agent",
       "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrecoveryoptions_osallowdra_name",
       "isChild": true,
-      "reason": "No on-prem AD DS"
+      "_note": "Changed from na to accept — Graph API requires this child when parent is enabled"
     },
     "4.11.7.2.6": {
-      "disposition": "na",
+      "disposition": "accept",
       "description": "BitLocker OS Drive: AD DS Backup Dropdown",
       "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrecoveryoptions_osactivedirectorybackupdropdown_name",
       "isChild": true,
-      "reason": "No on-prem AD DS"
+      "_note": "Changed from na to accept — Graph API requires this child when parent is enabled"
     },
     "4.11.7.2.8": {
-      "disposition": "na",
+      "disposition": "accept",
       "description": "BitLocker OS Drive: Hide Recovery Page",
       "settingDefinitionId": "device_vendor_msft_bitlocker_systemdrivesrecoveryoptions_oshiderecoverypage_name",
       "isChild": true,
-      "reason": "No on-prem AD DS"
+      "_note": "Changed from na to accept — Graph API requires this child when parent is enabled"
     },
 
     "_comment_modified": "=== MODIFIED — deploy with non-CIS value ===",

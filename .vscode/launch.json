@@ -71,6 +71,26 @@
         "-PolicyFile",
         "'${workspaceFolder}/output/baseline/CIS L1 - Auditing.json','${workspaceFolder}/output/exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Baseline.json','${workspaceFolder}/output/exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Alt (allowed).json'"
       ]
+    },
+    {
+      "name": "Deploy LIVE Prod: All Policies (Manifest)",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Deploy-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "Prod",
+        "-ManifestFile", "${workspaceFolder}/output/manifest.json"
+      ]
+    },
+    {
+      "name": "Get Group Assignments (Prod)",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Get-GroupPolicyAssignments.ps1",
+      "args": [
+        "-Tenant", "Prod",
+        "-GroupName", "001i-test-security-baseline"
+      ]
     }
   ]
 }
