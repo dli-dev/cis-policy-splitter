@@ -317,5 +317,62 @@
       "ourValue": "Prompt for credentials on the secure desktop",
       "modifiedValue": "device_vendor_msft_policy_config_localpoliciessecurityoptions_useraccountcontrol_behavioroftheelevationpromptforstandardusers_1"
     }
+  },
+  "serviceControls": {
+    "_comment": "System Service Scripts — keyed by registry service name",
+
+    "_comment_exceptionable": "=== EXCEPTIONABLE — deploy as separate scripts ===",
+
+    "sshd": {
+      "cis_rec": "81.14",
+      "disposition": "exceptionable",
+      "description": "OpenSSH SSH Server",
+      "reason": "Remote admin"
+    },
+    "RemoteAccess": {
+      "cis_rec": "81.23",
+      "disposition": "exceptionable",
+      "description": "Routing and Remote Access",
+      "reason": "COSU routing needs"
+    },
+    "MSiSCSI": {
+      "cis_rec": "81.13",
+      "disposition": "exceptionable",
+      "description": "Microsoft iSCSI Initiator Service",
+      "reason": "Storage needs"
+    },
+    "SessionEnv": {
+      "cis_rec": "81.17",
+      "disposition": "exceptionable",
+      "description": "Remote Desktop Configuration",
+      "reason": "RDP needed (pair with 81.18 + 4.11.36.4.2.1)"
+    },
+    "TermService": {
+      "cis_rec": "81.18",
+      "disposition": "exceptionable",
+      "description": "Remote Desktop Services",
+      "reason": "RDP needed (pair with 81.17 + 4.11.36.4.2.1)"
+    },
+
+    "_comment_reject": "=== REJECT — remove from scripts entirely ===",
+
+    "BTAGService": {
+      "cis_rec": "81.1",
+      "disposition": "reject",
+      "description": "Bluetooth Audio Gateway Service",
+      "reason": "Breaks wireless peripherals; no Intune Bluetooth version controls"
+    },
+    "bthserv": {
+      "cis_rec": "81.2",
+      "disposition": "reject",
+      "description": "Bluetooth Support Service",
+      "reason": "Breaks wireless peripherals; no Intune Bluetooth version controls"
+    },
+    "lfsvc": {
+      "cis_rec": "81.6",
+      "disposition": "reject",
+      "description": "Geolocation Service",
+      "reason": "Geolocation needed; researching compensating controls"
+    }
   }
 }
