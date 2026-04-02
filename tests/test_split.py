@@ -398,3 +398,75 @@ def test_swap_value_child_integer():
     assert swapped_child["simpleSettingValue"]["value"] == 30
     # Original should be unmodified
     assert child["simpleSettingValue"]["value"] == 15
+
+
+def test_build_output_policy():
+    """Output policy should contain only Graph API creation fields."""
+    from split_cis_policies import build_output_policy
+
+    source = {
+        "name": "CIS (L1) Some Policy - Windows 11 Intune 4.0.0",
+        "description": "CIS Recommendation Numbers:\n\n1.1\n1.2\n",
+        "platforms": "windows10",
+        "technologies": "mdm",
+        "templateReference": {
+            "templateId": "",
+            "templateFamily": "none",
+            "templateDisplayName": None,
+            "templateDisplayVersion": None,
+        },
+    }
+
+    settings = [_make_choice_setting("some_sid", "some_value")]
+
+    policy = build_output_policy(
+        name="CIS L1 - Some Policy",
+        description="test desc",
+        source_policy=source,
+        scope_tag="001-readonly",
+        settings=settings,
+    )
+
+    assert policy["name"] == "CIS L1 - Some Policy"
+    assert policy["description"] == "test desc"
+    assert policy["platforms"] == "windows10"
+    assert policy["roleScopeTagIds"] == ["001-readonly"]
+    assert policy["settings"] == settings
+    # Should NOT contain Graph metadata
+    assert "@odata.context" not in policy
+    assert "createdDateTime" not in policy
+    assert "id" not in policy
+    # templateReference should omit null display fields
+    assert "templateDisplayName" not in policy["templateReference"]
+
+
+def test_process_file_end_to_end(tmp_path):
+    """Full file processing should produce baseline + exceptionable + alt files + manifest entries."""
+    from split_cis_policies import load_config, process_file
+
+    config_path = Path(__file__).resolve().parent.parent / "cis-control-config.json"
+    source_path = (
+        Path(__file__).resolve().parent.parent
+        / "IntuneWindows11v4.0.0"
+        / "Settings Catalog"
+        / "Level 1"
+        / "CIS (L1) User Rights (89) - Windows 11 Intune 4.0.0.json"
+    )
+
+    config, lookup = load_config(str(config_path))
+    manifest = process_file(str(source_path), config, lookup, str(tmp_path), dry_run=False)
+
+    # Should have 1 baseline + 3 exceptionable baselines (89.10, 89.12, 89.14) + 3 alts
+    assert any(e["type"] == "baseline" for e in manifest)
+    exc_baselines = [e for e in manifest if e["type"] == "exceptionable"]
+    assert len(exc_baselines) == 3
+    alts = [e for e in manifest if e["type"] == "alternative"]
+    assert len(alts) == 3
+
+    # Baseline file should exist
+    bl = [e for e in manifest if e["type"] == "baseline"][0]
+    assert (tmp_path / bl["file"]).exists()
+
+    # Exceptionable files should exist
+    for e in exc_baselines:
+        assert (tmp_path / e["file"]).exists()

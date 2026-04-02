@@ -9,6 +9,7 @@ Writes output JSONs and a manifest for the PowerShell deployer.
 
 import copy
 import json
+import re
 from pathlib import Path
 
 
@@ -293,3 +294,192 @@ def swap_alt_value(setting: dict, alt: dict, target_child_sid: str = None) -> di
         target["simpleSettingValue"]["value"] = value
 
     return swapped
+
+
+def build_output_policy(
+    name: str,
+    description: str,
+    source_policy: dict,
+    scope_tag: str,
+    settings: list[dict],
+) -> dict:
+    """Build a clean output policy dict with only Graph API creation fields."""
+    template_ref = {
+        "templateId": source_policy["templateReference"]["templateId"],
+        "templateFamily": source_policy["templateReference"]["templateFamily"],
+    }
+    # Only include non-null display fields
+    for field in ("templateDisplayName", "templateDisplayVersion"):
+        val = source_policy["templateReference"].get(field)
+        if val:
+            template_ref[field] = val
+
+    return {
+        "name": name,
+        "description": description,
+        "platforms": source_policy["platforms"],
+        "technologies": source_policy["technologies"],
+        "roleScopeTagIds": [scope_tag],
+        "templateReference": template_ref,
+        "settings": settings,
+    }
+
+
+def _sanitize_filename(name: str) -> str:
+    """Remove characters illegal in file paths."""
+    name = re.sub(r'[<>:"/\\|?*]', '', name)
+    name = re.sub(r'\s+', ' ', name)
+    return name.strip()
+
+
+def _parse_level(policy_name: str) -> str:
+    """Parse CIS level from policy name."""
+    if "(L1)" in policy_name:
+        return "L1"
+    elif "(L2)" in policy_name:
+        return "L2"
+    elif "(BL)" in policy_name:
+        return "BL"
+    return "L1"
+
+
+def _parse_section_name(policy_name: str) -> str:
+    """Extract section name from policy name.
+
+    Strips: "CIS (L1) ", " - Windows 11 Intune 4.0.0", " (nn)" suffix.
+    """
+    name = re.sub(r'^CIS\s+\([^)]+\)\s+', '', policy_name)
+    name = re.sub(r'\s*-\s*Windows 11 Intune \d+\.\d+\.\d+\s*$', '', name)
+    name = re.sub(r'\s+\(\d+\)\s*$', '', name)
+    return name.strip()
+
+
+def process_file(
+    filepath: str,
+    config: dict,
+    lookup: dict,
+    output_dir: str,
+    dry_run: bool = False,
+) -> list[dict]:
+    """Process a single CIS Build Kit JSON file.
+
+    Returns a list of manifest entries.
+    """
+    with open(filepath, encoding="utf-8-sig") as f:
+        policy = json.load(f)
+
+    policy_name = policy["name"].strip()
+
+    # Skip check
+    if policy_name in [s.strip() for s in config.get("skipFiles", [])]:
+        return []
+
+    # Autopilot check
+    is_autopilot = policy_name in [s.strip() for s in config.get("autopilotPolicies", [])]
+
+    level = _parse_level(policy_name)
+    section_name = _parse_section_name(policy_name)
+
+    # Classify settings
+    result = classify_settings(policy["settings"], lookup)
+
+    manifest_entries = []
+
+    # --- Write baseline ---
+    if result["baseline"]:
+        baseline_name = f"CIS {level} - {section_name}"
+        baseline_policy = build_output_policy(
+            name=baseline_name,
+            description=policy.get("description", ""),
+            source_policy=policy,
+            scope_tag=config["scopeTags"]["readonly"],
+            settings=result["baseline"],
+        )
+
+        safe_name = _sanitize_filename(baseline_name)
+        rel_path = f"baseline/{safe_name}.json"
+        full_path = Path(output_dir) / rel_path
+
+        if not dry_run:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(full_path, "w", encoding="utf-8") as f:
+                json.dump(baseline_policy, f, indent=2, ensure_ascii=False)
+
+        assign_to = "AllUsers" if is_autopilot else "AllDevices"
+        policy_type = "autopilot" if is_autopilot else "baseline"
+        manifest_entries.append({
+            "file": rel_path,
+            "type": policy_type,
+            "assignTo": assign_to,
+        })
+
+    # --- Write exceptionable + alternatives ---
+    for ext in result["extracted"]:
+        # Exceptionable baseline
+        exc_name = f"CIS {ext['cis_rec']} - {ext['description']} - Baseline"
+        exc_policy = build_output_policy(
+            name=exc_name,
+            description=f"CIS {ext['cis_rec']} exceptionable baseline: {ext['description']}",
+            source_policy=policy,
+            scope_tag=config["scopeTags"]["exceptionable"],
+            settings=[ext["setting"]],
+        )
+
+        safe_name = _sanitize_filename(exc_name)
+        rel_path = f"exceptionable/{safe_name}.json"
+        full_path = Path(output_dir) / rel_path
+
+        if not dry_run:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(full_path, "w", encoding="utf-8") as f:
+                json.dump(exc_policy, f, indent=2, ensure_ascii=False)
+
+        manifest_entries.append({
+            "file": rel_path,
+            "type": "exceptionable",
+            "assignTo": "AllDevices",
+        })
+
+        # Alternatives
+        # Determine if this is a child extraction (need target_child_sid for swap)
+        target_child_sid = None
+        ctrl_for_ext = lookup.get(ext["setting"]["settingInstance"]["settingDefinitionId"])
+        if not ctrl_for_ext or ctrl_for_ext.get("cis_rec") != ext["cis_rec"]:
+            # The extracted setting's top-level SID doesn't match the control —
+            # this is a child extraction with parent wrapper
+            for sid, ctrl in lookup.items():
+                if ctrl["cis_rec"] == ext["cis_rec"] and ctrl["is_child"]:
+                    target_child_sid = sid
+                    break
+
+        for alt in ext.get("alternatives", []):
+            if not alt:
+                continue
+
+            alt_name = f"CIS {ext['cis_rec']} - {ext['description']} - Alt ({alt['name']})"
+            alt_setting = swap_alt_value(ext["setting"], alt, target_child_sid=target_child_sid)
+
+            alt_policy = build_output_policy(
+                name=alt_name,
+                description=f"CIS {ext['cis_rec']} alternative ({alt['name']}): {alt.get('description', '')}",
+                source_policy=policy,
+                scope_tag=config["scopeTags"]["exceptionable"],
+                settings=[alt_setting],
+            )
+
+            safe_name = _sanitize_filename(alt_name)
+            rel_path = f"exceptionable/{safe_name}.json"
+            full_path = Path(output_dir) / rel_path
+
+            if not dry_run:
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(full_path, "w", encoding="utf-8") as f:
+                    json.dump(alt_policy, f, indent=2, ensure_ascii=False)
+
+            manifest_entries.append({
+                "file": rel_path,
+                "type": "alternative",
+                "assignTo": "None",
+            })
+
+    return manifest_entries
