@@ -1,0 +1,76 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Split CIS Policies (Dry Run)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/split_cis_policies.py",
+      "args": [
+        "--path", "${workspaceFolder}/IntuneWindows11v4.0.0/Settings Catalog",
+        "--config", "${workspaceFolder}/cis-control-config.json",
+        "--dry-run"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Split CIS Policies",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/split_cis_policies.py",
+      "args": [
+        "--path", "${workspaceFolder}/IntuneWindows11v4.0.0/Settings Catalog",
+        "--config", "${workspaceFolder}/cis-control-config.json",
+        "--output", "${workspaceFolder}/output"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Deploy QA: 1 Baseline Only",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Deploy-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "QA",
+        "-PolicyFile",
+        "'${workspaceFolder}/output/baseline/CIS L1 - Auditing.json'",
+        "-WhatIf"
+      ]
+    },
+    {
+      "name": "Deploy QA: Baseline + Exceptionable",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Deploy-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "QA",
+        "-PolicyFile",
+        "'${workspaceFolder}/output/baseline/CIS L1 - Auditing.json','${workspaceFolder}/output/exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Baseline.json'",
+        "-WhatIf"
+      ]
+    },
+    {
+      "name": "Deploy QA: Baseline + Exceptionable + Alt",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Deploy-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "QA",
+        "-PolicyFile",
+        "'${workspaceFolder}/output/baseline/CIS L1 - Auditing.json','${workspaceFolder}/output/exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Baseline.json','${workspaceFolder}/output/exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Alt (allowed).json'",
+        "-WhatIf"
+      ]
+    },
+    {
+      "name": "Deploy LIVE Prod: Baseline + Exceptionable + Alt",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Deploy-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "Prod",
+        "-PolicyFile",
+        "'${workspaceFolder}/output/baseline/CIS L1 - Auditing.json','${workspaceFolder}/output/exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Baseline.json','${workspaceFolder}/output/exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Alt (allowed).json'"
+      ]
+    }
+  ]
+}

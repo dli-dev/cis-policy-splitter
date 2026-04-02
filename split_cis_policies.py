@@ -403,12 +403,10 @@ def process_file(
             with open(full_path, "w", encoding="utf-8") as f:
                 json.dump(baseline_policy, f, indent=2, ensure_ascii=False)
 
-        assign_to = "AllUsers" if is_autopilot else "AllDevices"
         policy_type = "autopilot" if is_autopilot else "baseline"
         manifest_entries.append({
             "file": rel_path,
             "type": policy_type,
-            "assignTo": assign_to,
         })
 
     # --- Write exceptionable + alternatives ---
@@ -435,7 +433,6 @@ def process_file(
         manifest_entries.append({
             "file": rel_path,
             "type": "exceptionable",
-            "assignTo": "AllDevices",
         })
 
         # Alternatives
@@ -477,7 +474,6 @@ def process_file(
             manifest_entries.append({
                 "file": rel_path,
                 "type": "alternative",
-                "assignTo": "None",
             })
 
     return manifest_entries

@@ -3,42 +3,76 @@
     Deploys CIS policies to Intune via Graph API using output from split-cis-policies.py.
 
 .DESCRIPTION
-    Reads output/manifest.json and the corresponding policy JSON files, then
-    creates each policy in Intune with appropriate scope tags and assignments.
+    Creates configuration policies in Intune from policy JSON files. Policies are
+    created without assignments — use a separate assignment workflow to target them.
+
+    Accepts either a manifest file (deploy all) or individual policy JSON paths.
 
     Run split_cis_policies.py first to generate the output directory.
 
-.PARAMETER OutputDir
-    Directory containing manifest.json and policy JSON files. Default: ./output
+.PARAMETER Tenant
+    Target tenant: QA or Prod. Resolves to utorontoqa.onmicrosoft.com or utoronto.onmicrosoft.com.
+
+.PARAMETER ManifestFile
+    Path to manifest.json. Deploys all policies listed in the manifest.
+
+.PARAMETER PolicyFile
+    One or more paths to individual policy JSON files to deploy.
 
 .EXAMPLE
-    pwsh Deploy-CISPolicies.ps1 -OutputDir ./output
+    pwsh Deploy-CISPolicies.ps1 -Tenant QA -ManifestFile ./output/manifest.json
 
 .EXAMPLE
-    pwsh Deploy-CISPolicies.ps1 -OutputDir ./output -WhatIf
+    pwsh Deploy-CISPolicies.ps1 -Tenant Prod -PolicyFile ./output/baseline/CIS_L1_Firewall.json
+
+.EXAMPLE
+    pwsh Deploy-CISPolicies.ps1 -Tenant QA -PolicyFile file1.json, file2.json -WhatIf
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$OutputDir = "./output"
+    [Parameter(Mandatory)]
+    [ValidateSet('QA', 'Prod')]
+    [string]$Tenant,
+
+    [Parameter(ParameterSetName = 'Manifest')]
+    [string]$ManifestFile = "./output/manifest.json",
+
+    [Parameter(ParameterSetName = 'Files', Mandatory)]
+    [string[]]$PolicyFile
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ---------------------------------------------------------------------------
-# 1. Load manifest
+# 1. Resolve policy file list
 # ---------------------------------------------------------------------------
-$manifestPath = Join-Path $OutputDir "manifest.json"
-if (-not (Test-Path $manifestPath)) {
-    Write-Error "Manifest not found: $manifestPath. Run split_cis_policies.py first."
-    return
+if ($PSCmdlet.ParameterSetName -eq 'Files') {
+    $policyFiles = @()
+    foreach ($f in $PolicyFile) {
+        if (-not (Test-Path $f)) {
+            Write-Error "Policy file not found: $f"
+            return
+        }
+        $policyFiles += (Resolve-Path $f).Path
+    }
+    Write-Host "Deploying $($policyFiles.Count) policy file(s)" -ForegroundColor Gray
+} else {
+    if (-not (Test-Path $ManifestFile)) {
+        Write-Error "Manifest not found: $ManifestFile. Run split_cis_policies.py first."
+        return
+    }
+    $manifestRaw = Get-Content $ManifestFile -Encoding UTF8 -Raw
+    if ($manifestRaw[0] -eq [char]0xFEFF) { $manifestRaw = $manifestRaw.Substring(1) }
+    $manifest = $manifestRaw | ConvertFrom-Json
+
+    $manifestDir = Split-Path $ManifestFile -Parent
+    $policyFiles = @()
+    foreach ($entry in $manifest) {
+        $policyFiles += (Join-Path $manifestDir $entry.file)
+    }
+    Write-Host "Loaded manifest: $($policyFiles.Count) policies" -ForegroundColor Gray
 }
-
-$manifestRaw = Get-Content $manifestPath -Encoding UTF8 -Raw
-if ($manifestRaw[0] -eq [char]0xFEFF) { $manifestRaw = $manifestRaw.Substring(1) }
-$manifest = $manifestRaw | ConvertFrom-Json
-
-Write-Host "Loaded manifest: $($manifest.Count) policies" -ForegroundColor Gray
 
 # ---------------------------------------------------------------------------
 # 2. Scope tag resolution cache
@@ -87,13 +121,13 @@ function Find-ExistingPolicy {
 }
 
 function New-IntunePolicy {
-    param([hashtable]$PolicyBody, [string]$AssignTo)
+    param([hashtable]$PolicyBody)
 
     $policyName = $PolicyBody.name
-    $result = @{ Name = $policyName; Id = $null; Created = $false; Skipped = $false; Assigned = $false; AssignTo = $AssignTo; Error = $null }
+    $result = @{ Name = $policyName; Id = $null; Created = $false; Skipped = $false; Error = $null }
 
     if ($WhatIfPreference) {
-        Write-Host "  [WhatIf] Would create: $policyName (assign: $AssignTo)" -ForegroundColor DarkYellow
+        Write-Host "  [WhatIf] Would create: $policyName" -ForegroundColor DarkYellow
         $result.Id = 'WHATIF-ID'
         return $result
     }
@@ -113,23 +147,6 @@ function New-IntunePolicy {
     } catch {
         $result.Error = $_.Exception.Message
         Write-Warning "Failed to create '$policyName': $($_.Exception.Message)"
-        return $result
-    }
-
-    if ($AssignTo -ne 'None' -and $result.Id) {
-        try {
-            $target = switch ($AssignTo) {
-                'AllDevices' { @{ '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget' } }
-                'AllUsers'   { @{ '@odata.type' = '#microsoft.graph.allLicensedUsersAssignmentTarget' } }
-            }
-            $assignBody = @{ assignments = @(@{ target = $target }) }
-            Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assign" -Body ($assignBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
-            $result.Assigned = $true
-            Write-Host "  ASSIGNED: $policyName -> $AssignTo" -ForegroundColor Green
-        } catch {
-            Write-Warning "Failed to assign '$policyName': $($_.Exception.Message)"
-            $result.Error = "Assignment failed: $($_.Exception.Message)"
-        }
     }
 
     return $result
@@ -138,32 +155,29 @@ function New-IntunePolicy {
 # ---------------------------------------------------------------------------
 # 4. Connect to Graph
 # ---------------------------------------------------------------------------
+$tenantDomain = switch ($Tenant) {
+    'QA'   { 'utorontoqa.onmicrosoft.com' }
+    'Prod' { 'utoronto.onmicrosoft.com' }
+}
+
 if (-not $WhatIfPreference) {
     $requiredScope = "DeviceManagementConfiguration.ReadWrite.All"
-    try {
-        $context = Get-MgContext
-        if (-not $context -or $context.Scopes -notcontains $requiredScope) {
-            throw "need auth"
-        }
-        Write-Host "Graph API: Connected as $($context.Account)" -ForegroundColor Gray
-    } catch {
-        Write-Host "Connecting to Microsoft Graph..." -ForegroundColor White
-        Connect-MgGraph -Scopes $requiredScope -ErrorAction Stop
-        Write-Host "Connected as $((Get-MgContext).Account)" -ForegroundColor Green
-    }
+    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "Connecting to Microsoft Graph ($Tenant`: $tenantDomain)..." -ForegroundColor White
+    Connect-MgGraph -Scopes $requiredScope -TenantId $tenantDomain -ContextScope Process -ErrorAction Stop
+    Write-Host "Connected as $((Get-MgContext).Account) [$Tenant]" -ForegroundColor Green
 } else {
-    Write-Host "[WhatIf] Would connect to Microsoft Graph" -ForegroundColor DarkYellow
+    Write-Host "[WhatIf] Would connect to Microsoft Graph ($Tenant`: $tenantDomain)" -ForegroundColor DarkYellow
 }
 
 # ---------------------------------------------------------------------------
-# 5. Deploy each policy from manifest
+# 5. Deploy each policy
 # ---------------------------------------------------------------------------
 $stats = @{ Created = 0; Skipped = 0; Failed = 0 }
 $deploymentLog = [System.Collections.ArrayList]::new()
 
-foreach ($entry in $manifest) {
-    $policyPath = Join-Path $OutputDir $entry.file
-    $raw = Get-Content $policyPath -Encoding UTF8 -Raw
+foreach ($filePath in $policyFiles) {
+    $raw = Get-Content $filePath -Encoding UTF8 -Raw
     if ($raw[0] -eq [char]0xFEFF) { $raw = $raw.Substring(1) }
     $policyBody = $raw | ConvertFrom-Json -AsHashtable
 
@@ -174,13 +188,12 @@ foreach ($entry in $manifest) {
     }
     $policyBody.roleScopeTagIds = $resolvedTags
 
-    Write-Host "`n[$($entry.type.ToUpper())] $($policyBody.name)" -ForegroundColor White
-    $result = New-IntunePolicy -PolicyBody $policyBody -AssignTo $entry.assignTo
+    Write-Host "`n$($policyBody.name)" -ForegroundColor White
+    $result = New-IntunePolicy -PolicyBody $policyBody
 
     [void]$deploymentLog.Add([ordered]@{
-        name = $result.Name; id = $result.Id; type = $entry.type
-        assignTo = $entry.assignTo; created = $result.Created
-        skipped = $result.Skipped; assigned = $result.Assigned; error = $result.Error
+        name = $result.Name; id = $result.Id; file = $filePath
+        created = $result.Created; skipped = $result.Skipped; error = $result.Error
     })
 
     if ($result.Created) { $stats.Created++ }
@@ -200,16 +213,23 @@ if (-not $WhatIfPreference -and $deploymentLog.Count -gt 0) {
         created = $stats.Created; skipped = $stats.Skipped; failed = $stats.Failed
         policies = @($deploymentLog)
     }
-    $logPath = Join-Path $OutputDir "deployment-log.json"
+    # Write log next to manifest or in current directory
+    if ($PSCmdlet.ParameterSetName -eq 'Manifest') {
+        $logDir = Split-Path $ManifestFile -Parent
+    } else {
+        $logDir = "."
+    }
+    $logPath = Join-Path $logDir "deployment-log.json"
     $logJson = $logContent | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText(
-        (Join-Path (Resolve-Path $OutputDir).Path "deployment-log.json"),
+        (Resolve-Path $logDir | Join-Path -ChildPath "deployment-log.json"),
         $logJson, [System.Text.UTF8Encoding]::new($false)
     )
     Write-Host "`nDeployment log: $logPath" -ForegroundColor Gray
 }
 
 Write-Host "`n=== Deployment Summary ===" -ForegroundColor White
-Write-Host "  Created: $($stats.Created)" -ForegroundColor Green
-Write-Host "  Skipped: $($stats.Skipped) (already exist)" -ForegroundColor Yellow
-Write-Host "  Failed:  $($stats.Failed)" -ForegroundColor $(if ($stats.Failed -gt 0) { 'Red' } else { 'Gray' })
+Write-Host "  Created:    $($stats.Created)" -ForegroundColor Green
+Write-Host "  Skipped:    $($stats.Skipped) (already exist)" -ForegroundColor Yellow
+Write-Host "  Failed:     $($stats.Failed)" -ForegroundColor $(if ($stats.Failed -gt 0) { 'Red' } else { 'Gray' })
+Write-Host "  Unassigned: policies were created without assignments" -ForegroundColor Gray
