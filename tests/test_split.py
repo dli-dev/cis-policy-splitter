@@ -201,3 +201,113 @@ def test_classify_top_level_modified():
     assert len(result["baseline"]) == 1
     # Value should be swapped
     assert result["baseline"][0]["settingInstance"]["choiceSettingValue"]["value"] == new_value
+
+
+def test_classify_child_reject():
+    """Rejected children should be removed from parent's children array."""
+    from split_cis_policies import classify_settings
+
+    child_sid = "device_vendor_msft_bitlocker_systemdrivesrequirestartupauthentication_configurepinusagedropdown_name"
+    parent_sid = "some_parent_sid"
+
+    lookup = {
+        child_sid: {
+            "cis_rec": "4.11.7.2.12",
+            "disposition": "reject",
+            "description": "Configure TPM Startup PIN",
+            "is_child": True,
+            "alternatives": [],
+            "modified_value": None,
+        }
+    }
+
+    child = {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+        "settingDefinitionId": child_sid,
+        "settingInstanceTemplateReference": None,
+        "choiceSettingValue": {
+            "settingValueTemplateReference": None,
+            "value": "some_value",
+            "children": [],
+        },
+    }
+    keep_child = {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationSimpleSettingInstance",
+        "settingDefinitionId": "some_other_child",
+        "settingInstanceTemplateReference": None,
+        "simpleSettingValue": {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationIntegerSettingValue",
+            "settingValueTemplateReference": None,
+            "value": 42,
+        },
+    }
+
+    settings = [_make_choice_setting(parent_sid, "parent_val", [child, keep_child])]
+
+    result = classify_settings(settings, lookup)
+    assert len(result["baseline"]) == 1
+    # Parent should remain with only the kept child
+    parent_children = result["baseline"][0]["settingInstance"]["choiceSettingValue"]["children"]
+    assert len(parent_children) == 1
+    assert parent_children[0]["settingDefinitionId"] == "some_other_child"
+
+
+def test_classify_child_exceptionable():
+    """Exceptionable child should be extracted with parent wrapper, removed from baseline parent."""
+    from split_cis_policies import classify_settings
+
+    parent_sid = "device_vendor_msft_policy_config_devicelock_devicepasswordenabled"
+    child_sid = "device_vendor_msft_policy_config_devicelock_maxinactivitytimedevicelock"
+    other_child_sid = "device_vendor_msft_policy_config_devicelock_mindevicepasswordlength"
+
+    lookup = {
+        child_sid: {
+            "cis_rec": "26.7",
+            "disposition": "exceptionable",
+            "description": "Max Inactivity Time Device Lock",
+            "is_child": True,
+            "alternatives": [
+                {"name": "30min", "settingValue": {"value": 30}},
+            ],
+            "modified_value": None,
+        }
+    }
+
+    target_child = {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationSimpleSettingInstance",
+        "settingDefinitionId": child_sid,
+        "settingInstanceTemplateReference": None,
+        "simpleSettingValue": {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationIntegerSettingValue",
+            "settingValueTemplateReference": None,
+            "value": 15,
+        },
+    }
+    other_child = {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationSimpleSettingInstance",
+        "settingDefinitionId": other_child_sid,
+        "settingInstanceTemplateReference": None,
+        "simpleSettingValue": {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationIntegerSettingValue",
+            "settingValueTemplateReference": None,
+            "value": 14,
+        },
+    }
+
+    settings = [_make_choice_setting(parent_sid, parent_sid + "_0", [target_child, other_child])]
+
+    result = classify_settings(settings, lookup)
+
+    # Baseline parent should have only the other child
+    assert len(result["baseline"]) == 1
+    bl_children = result["baseline"][0]["settingInstance"]["choiceSettingValue"]["children"]
+    assert len(bl_children) == 1
+    assert bl_children[0]["settingDefinitionId"] == other_child_sid
+
+    # Extracted should have parent wrapper with only the target child
+    assert len(result["extracted"]) == 1
+    ext = result["extracted"][0]
+    assert ext["cis_rec"] == "26.7"
+    ext_children = ext["setting"]["settingInstance"]["choiceSettingValue"]["children"]
+    assert len(ext_children) == 1
+    assert ext_children[0]["settingDefinitionId"] == child_sid
