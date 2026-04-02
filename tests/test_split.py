@@ -470,3 +470,49 @@ def test_process_file_end_to_end(tmp_path):
     # Exceptionable files should exist
     for e in exc_baselines:
         assert (tmp_path / e["file"]).exists()
+
+
+def test_batch_mode(tmp_path):
+    """Processing a directory should handle all files and write manifest.json."""
+    from split_cis_policies import main
+
+    source_dir = (
+        Path(__file__).resolve().parent.parent
+        / "IntuneWindows11v4.0.0"
+        / "Settings Catalog"
+    )
+    config_path = str(Path(__file__).resolve().parent.parent / "cis-control-config.json")
+
+    main(
+        path=str(source_dir),
+        config_path=config_path,
+        output_dir=str(tmp_path),
+        dry_run=False,
+    )
+
+    # manifest.json should exist
+    manifest_path = tmp_path / "manifest.json"
+    assert manifest_path.exists()
+
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+
+    # Should have baselines, exceptionables, and alternatives
+    types = {e["type"] for e in manifest}
+    assert "baseline" in types
+    assert "exceptionable" in types
+    assert "alternative" in types
+
+    # All referenced files should exist
+    for entry in manifest:
+        assert (tmp_path / entry["file"]).exists(), f"Missing: {entry['file']}"
+
+    # Windows Update should be skipped (in skipFiles)
+    names = [e["file"] for e in manifest]
+    assert not any("Windows Update" in n for n in names)
+
+    # Autopilot should be tagged AllUsers
+    autopilot = [e for e in manifest if "Autopilot" in e["file"]]
+    assert len(autopilot) == 1
+    assert autopilot[0]["assignTo"] == "AllUsers"
+    assert autopilot[0]["type"] == "autopilot"

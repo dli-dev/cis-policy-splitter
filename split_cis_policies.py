@@ -7,6 +7,7 @@ then splits them into baseline bundles, exceptionable policies, and alternatives
 Writes output JSONs and a manifest for the PowerShell deployer.
 """
 
+import argparse
 import copy
 import json
 import re
@@ -483,3 +484,69 @@ def process_file(
             })
 
     return manifest_entries
+
+
+def main(
+    path: str,
+    config_path: str,
+    output_dir: str = "./output",
+    dry_run: bool = False,
+) -> None:
+    """Main entry point: process all files and write manifest."""
+    config, lookup = load_config(config_path)
+
+    # Resolve input files
+    p = Path(path)
+    if p.is_dir():
+        json_files = sorted(p.rglob("*.json"))
+    else:
+        json_files = [p]
+
+    if not json_files:
+        print(f"No JSON files found at: {path}")
+        return
+
+    print(f"Loaded config: {len(lookup)} controls")
+    print(f"Found {len(json_files)} JSON file(s)")
+
+    all_manifest = []
+
+    for jf in json_files:
+        entries = process_file(str(jf), config, lookup, output_dir, dry_run)
+        all_manifest.extend(entries)
+
+    # Write manifest
+    if not dry_run:
+        manifest_path = Path(output_dir) / "manifest.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(all_manifest, f, indent=2, ensure_ascii=False)
+        print(f"\nManifest written: {manifest_path} ({len(all_manifest)} entries)")
+
+    # Summary
+    baselines = sum(1 for e in all_manifest if e["type"] in ("baseline", "autopilot"))
+    exceptionables = sum(1 for e in all_manifest if e["type"] == "exceptionable")
+    alternatives = sum(1 for e in all_manifest if e["type"] == "alternative")
+    print(f"\n=== Summary ===")
+    print(f"  Baselines:      {baselines}")
+    print(f"  Exceptionables: {exceptionables}")
+    print(f"  Alternatives:   {alternatives}")
+    print(f"  Total policies: {len(all_manifest)}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Split CIS Build Kit JSON files into baseline and exceptionable policies."
+    )
+    parser.add_argument("--path", required=True, help="Single JSON file or directory (recursed)")
+    parser.add_argument("--config", required=True, help="Path to cis-control-config.json")
+    parser.add_argument("--output", default="./output", help="Output directory (default: ./output)")
+    parser.add_argument("--dry-run", action="store_true", help="Print actions without writing files")
+    args = parser.parse_args()
+
+    main(
+        path=args.path,
+        config_path=args.config,
+        output_dir=args.output,
+        dry_run=args.dry_run,
+    )
