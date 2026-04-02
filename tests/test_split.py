@@ -65,3 +65,139 @@ def test_load_config_skip_files():
     assert "CIS (L1) Autopilot - Windows 11 Intune 4.0.0" in config["autopilotPolicies"]
     assert config["scopeTags"]["readonly"] == "001-readonly"
     assert config["scopeTags"]["exceptionable"] == "001"
+
+
+def _make_choice_setting(sid: str, value: str, children: list = None) -> dict:
+    """Helper to build a minimal choice setting."""
+    return {
+        "id": "0",
+        "settingInstance": {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+            "settingDefinitionId": sid,
+            "settingInstanceTemplateReference": None,
+            "choiceSettingValue": {
+                "settingValueTemplateReference": None,
+                "value": value,
+                "children": children or [],
+            },
+        },
+    }
+
+
+def _make_simple_setting(sid: str, value: int) -> dict:
+    """Helper to build a minimal simple integer setting."""
+    return {
+        "id": "0",
+        "settingInstance": {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationSimpleSettingInstance",
+            "settingDefinitionId": sid,
+            "settingInstanceTemplateReference": None,
+            "simpleSettingValue": {
+                "@odata.type": "#microsoft.graph.deviceManagementConfigurationIntegerSettingValue",
+                "settingValueTemplateReference": None,
+                "value": value,
+            },
+        },
+    }
+
+
+def _make_collection_setting(sid: str, values: list[str]) -> dict:
+    """Helper to build a minimal simple setting collection (User Rights)."""
+    return {
+        "id": "0",
+        "settingInstance": {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationSimpleSettingCollectionInstance",
+            "settingDefinitionId": sid,
+            "settingInstanceTemplateReference": None,
+            "simpleSettingCollectionValue": [
+                {
+                    "@odata.type": "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
+                    "settingValueTemplateReference": None,
+                    "value": v,
+                }
+                for v in values
+            ],
+        },
+    }
+
+
+def test_classify_top_level_accept():
+    """Settings not in lookup should be accepted (kept in baseline)."""
+    from split_cis_policies import classify_settings
+
+    lookup = {}  # empty lookup = everything is accept
+    settings = [_make_choice_setting("some_unknown_sid", "some_value")]
+
+    result = classify_settings(settings, lookup)
+    assert len(result["baseline"]) == 1
+    assert len(result["extracted"]) == 0
+    assert result["dropped"] == 0
+
+
+def test_classify_top_level_reject():
+    """Rejected settings should be dropped."""
+    from split_cis_policies import classify_settings
+
+    sid = "device_vendor_msft_policy_config_camera_allowcamera"
+    lookup = {
+        sid: {
+            "cis_rec": "12.1",
+            "disposition": "reject",
+            "description": "Allow Camera",
+            "is_child": False,
+            "alternatives": [],
+            "modified_value": None,
+        }
+    }
+    settings = [_make_choice_setting(sid, "some_value")]
+
+    result = classify_settings(settings, lookup)
+    assert len(result["baseline"]) == 0
+    assert result["dropped"] == 1
+
+
+def test_classify_top_level_exceptionable():
+    """Exceptionable top-level settings should be extracted."""
+    from split_cis_policies import classify_settings
+
+    sid = "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_enableguestaccountstatus"
+    lookup = {
+        sid: {
+            "cis_rec": "49.1",
+            "disposition": "exceptionable",
+            "description": "Guest Account Status",
+            "is_child": False,
+            "alternatives": [{"name": "enabled", "settingValue": {"value": sid + "_1"}}],
+            "modified_value": None,
+        }
+    }
+    settings = [_make_choice_setting(sid, sid + "_0")]
+
+    result = classify_settings(settings, lookup)
+    assert len(result["baseline"]) == 0
+    assert len(result["extracted"]) == 1
+    assert result["extracted"][0]["cis_rec"] == "49.1"
+
+
+def test_classify_top_level_modified():
+    """Modified settings should have their value swapped and stay in baseline."""
+    from split_cis_policies import classify_settings
+
+    sid = "device_vendor_msft_policy_config_localpoliciessecurityoptions_useraccountcontrol_behavioroftheelevationpromptforstandardusers"
+    new_value = sid + "_1"
+    lookup = {
+        sid: {
+            "cis_rec": "49.29",
+            "disposition": "modified",
+            "description": "UAC Standard User Elevation Prompt Behavior",
+            "is_child": False,
+            "alternatives": [],
+            "modified_value": new_value,
+        }
+    }
+    settings = [_make_choice_setting(sid, sid + "_0")]
+
+    result = classify_settings(settings, lookup)
+    assert len(result["baseline"]) == 1
+    # Value should be swapped
+    assert result["baseline"][0]["settingInstance"]["choiceSettingValue"]["value"] == new_value
