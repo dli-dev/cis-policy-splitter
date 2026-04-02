@@ -109,7 +109,49 @@ foreach ($policy in $configPolicies) {
 }
 
 # ---------------------------------------------------------------------------
-# 6. Query security baselines (intents)
+# 6. Query device configuration profiles (Templates)
+# ---------------------------------------------------------------------------
+Write-Host "Querying device configuration profiles..." -ForegroundColor Gray
+$deviceConfigs = Get-AllPages -Uri "https://graph.microsoft.com/beta/deviceManagement/deviceConfigurations?`$select=id,displayName&`$top=100"
+Write-Host "  Found $($deviceConfigs.Count) device configuration profiles total" -ForegroundColor Gray
+
+$matchedDeviceConfig = @()
+foreach ($dc in $deviceConfigs) {
+    $assignments = Get-AllPages -Uri "https://graph.microsoft.com/beta/deviceManagement/deviceConfigurations('$($dc.id)')/assignments"
+    $assignType = Get-GroupAssignmentType -Assignments $assignments -GroupId $groupId
+    if ($assignType) {
+        $matchedDeviceConfig += [PSCustomObject]@{
+            Name       = $dc.displayName
+            Type       = 'Device Configuration'
+            Assignment = $assignType
+            Id         = $dc.id
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 7. Query group policy configurations (Administrative Templates)
+# ---------------------------------------------------------------------------
+Write-Host "Querying administrative templates..." -ForegroundColor Gray
+$gpConfigs = Get-AllPages -Uri "https://graph.microsoft.com/beta/deviceManagement/groupPolicyConfigurations?`$select=id,displayName&`$top=100"
+Write-Host "  Found $($gpConfigs.Count) administrative templates total" -ForegroundColor Gray
+
+$matchedGP = @()
+foreach ($gp in $gpConfigs) {
+    $assignments = Get-AllPages -Uri "https://graph.microsoft.com/beta/deviceManagement/groupPolicyConfigurations('$($gp.id)')/assignments"
+    $assignType = Get-GroupAssignmentType -Assignments $assignments -GroupId $groupId
+    if ($assignType) {
+        $matchedGP += [PSCustomObject]@{
+            Name       = $gp.displayName
+            Type       = 'Administrative Template'
+            Assignment = $assignType
+            Id         = $gp.id
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 8. Query security baselines (intents)
 # ---------------------------------------------------------------------------
 Write-Host "Querying security baselines..." -ForegroundColor Gray
 $intents = Get-AllPages -Uri "https://graph.microsoft.com/beta/deviceManagement/intents?`$select=id,displayName,templateId&`$top=100"
@@ -130,9 +172,9 @@ foreach ($intent in $intents) {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Output results
+# 9. Output results
 # ---------------------------------------------------------------------------
-$allMatched = @($matchedConfig) + @($matchedBaselines)
+$allMatched = @($matchedConfig) + @($matchedDeviceConfig) + @($matchedGP) + @($matchedBaselines)
 
 Write-Host "`n=== Policies assigned to '$GroupName' ===" -ForegroundColor White
 

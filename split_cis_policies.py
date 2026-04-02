@@ -414,7 +414,7 @@ def process_file(
         manifest_entries.append({
             "file": rel_path,
             "type": policy_type,
-            "assignTo": assignment_group,
+            "assignTo": autopilot_assignment_group if is_autopilot else assignment_group,
         })
 
     # --- Write exceptionable + alternatives ---
@@ -510,10 +510,13 @@ def main(
         return
 
     assignment_group = config.get("assignmentGroup")
+    autopilot_assignment_group = config.get("autopilotAssignmentGroup", assignment_group)
 
     print(f"Loaded config: {len(lookup)} controls")
     if assignment_group:
         print(f"Assignment group: {assignment_group}")
+    if autopilot_assignment_group and autopilot_assignment_group != assignment_group:
+        print(f"Autopilot assignment group: {autopilot_assignment_group}")
     print(f"Found {len(json_files)} JSON file(s)")
 
     all_manifest = []

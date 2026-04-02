@@ -10,6 +10,7 @@
     "exceptionable": "001"
   },
   "assignmentGroup": "001i-test-security-baseline",
+  "autopilotAssignmentGroup": "001i-test-security-baseline-user",
   "doNotDeploy": ["49.9", "49.10"],
   "_doNotDeploy_note": "49.9 and 49.10 are also in controls as rejects so the splitter drops them",
   "controls": {
@@ -312,6 +313,33 @@
       "cisValue": "Automatically deny elevation requests",
       "ourValue": "Prompt for credentials on the secure desktop",
       "modifiedValue": "device_vendor_msft_policy_config_localpoliciessecurityoptions_useraccountcontrol_behavioroftheelevationpromptforstandardusers_1"
+    },
+    "4.11.7.4": {
+      "disposition": "modified",
+      "description": "BitLocker Encryption: Fixed Drives",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsfdvdropdown_name",
+      "isChild": true,
+      "cisValue": "XTS-AES 128-bit",
+      "ourValue": "XTS-AES 256-bit",
+      "modifiedValue": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsfdvdropdown_name_7"
+    },
+    "4.11.7.5": {
+      "disposition": "modified",
+      "description": "BitLocker Encryption: OS Drives",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsosdropdown_name",
+      "isChild": true,
+      "cisValue": "XTS-AES 128-bit",
+      "ourValue": "XTS-AES 256-bit",
+      "modifiedValue": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsosdropdown_name_7"
+    },
+    "4.11.7.6": {
+      "disposition": "modified",
+      "description": "BitLocker Encryption: Removable Drives",
+      "settingDefinitionId": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsrdvdropdown_name",
+      "isChild": true,
+      "cisValue": "XTS-AES 128-bit",
+      "ourValue": "XTS-AES 256-bit",
+      "modifiedValue": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsrdvdropdown_name_7"
     }
   },
   "serviceControls": {

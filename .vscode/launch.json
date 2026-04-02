@@ -83,13 +83,43 @@
       ]
     },
     {
+      "name": "Deploy PROD: BitLocker Only",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Deploy-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "Prod",
+        "-PolicyFile",
+        "'${workspaceFolder}/output/baseline/CIS BL - BitLocker.json'"
+      ]
+    },
+    {
+      "name": "Export CIS Policies (Prod)",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Export-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "Prod"
+      ]
+    },
+    {
+      "name": "Delete PROD",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Delete-CISPolicies.ps1",
+      "args": [
+        "-Tenant", "Prod",
+        "-CsvFile", "${workspaceFolder}/cis-policies-prod.csv",
+      ]
+    },
+    {
       "name": "Get Group Assignments (Prod)",
       "type": "PowerShell",
       "request": "launch",
       "script": "${workspaceFolder}/Get-GroupPolicyAssignments.ps1",
       "args": [
         "-Tenant", "Prod",
-        "-GroupName", "001i-test-security-baseline"
+        "-GroupName", "9047i-dw-win-autopilot-devices"
       ]
     }
   ]
