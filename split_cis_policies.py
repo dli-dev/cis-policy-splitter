@@ -214,3 +214,82 @@ def classify_settings(settings: list[dict], lookup: dict) -> dict:
         "extracted": extracted,
         "dropped": dropped,
     }
+
+
+def _find_child(inst: dict, target_sid: str) -> dict | None:
+    """Recursively find a child node by settingDefinitionId."""
+    # choiceSettingValue.children
+    csv = inst.get("choiceSettingValue")
+    if csv and isinstance(csv, dict):
+        for child in csv.get("children", []):
+            if child.get("settingDefinitionId") == target_sid:
+                return child
+            found = _find_child(child, target_sid)
+            if found:
+                return found
+
+    # groupSettingCollectionValue[].children
+    gscv = inst.get("groupSettingCollectionValue")
+    if gscv and isinstance(gscv, list):
+        for group in gscv:
+            for child in group.get("children", []):
+                if child.get("settingDefinitionId") == target_sid:
+                    return child
+                found = _find_child(child, target_sid)
+                if found:
+                    return found
+
+    return None
+
+
+def swap_alt_value(setting: dict, alt: dict, target_child_sid: str = None) -> dict:
+    """Deep-copy a setting and swap its value for an alternative.
+
+    Args:
+        setting: The original setting dict.
+        alt: The alternative dict with "name" and "settingValue" keys.
+        target_child_sid: If set, swap the value on this child inside the setting
+                          rather than the top-level setting itself.
+
+    Returns:
+        A deep copy of the setting with the value swapped.
+    """
+    swapped = copy.deepcopy(setting)
+
+    alt_value = alt.get("settingValue")
+    if alt_value is None:
+        return swapped
+
+    value = alt_value.get("value")
+    if value is None:
+        return swapped
+
+    # Find the target node to swap
+    if target_child_sid:
+        # Find the child by settingDefinitionId
+        target = _find_child(swapped["settingInstance"], target_child_sid)
+        if not target:
+            return swapped
+    else:
+        target = swapped["settingInstance"]
+
+    # Detect setting type and swap
+    odata_type = target.get("@odata.type", "")
+
+    if "ChoiceSettingInstance" in odata_type:
+        target["choiceSettingValue"]["value"] = value
+
+    elif "SimpleSettingCollectionInstance" in odata_type:
+        target["simpleSettingCollectionValue"] = [
+            {
+                "@odata.type": "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
+                "settingValueTemplateReference": None,
+                "value": v,
+            }
+            for v in value
+        ]
+
+    elif "SimpleSettingInstance" in odata_type:
+        target["simpleSettingValue"]["value"] = value
+
+    return swapped

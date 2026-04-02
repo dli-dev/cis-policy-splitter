@@ -311,3 +311,90 @@ def test_classify_child_exceptionable():
     ext_children = ext["setting"]["settingInstance"]["choiceSettingValue"]["children"]
     assert len(ext_children) == 1
     assert ext_children[0]["settingDefinitionId"] == child_sid
+
+
+def test_swap_value_choice():
+    """Choice setting value swap should replace the value string."""
+    from split_cis_policies import swap_alt_value
+
+    sid = "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_enableguestaccountstatus"
+    setting = _make_choice_setting(sid, sid + "_0")
+    alt = {"name": "enabled", "settingValue": {"value": sid + "_1"}}
+
+    swapped = swap_alt_value(setting, alt)
+    assert swapped["settingInstance"]["choiceSettingValue"]["value"] == sid + "_1"
+    # Original should be unmodified
+    assert setting["settingInstance"]["choiceSettingValue"]["value"] == sid + "_0"
+
+
+def test_swap_value_simple_integer():
+    """Simple integer setting value swap should replace the integer."""
+    from split_cis_policies import swap_alt_value
+
+    sid = "device_vendor_msft_policy_config_localpoliciessecurityoptions_interactivelogon_machineinactivitylimit_v2"
+    setting = _make_simple_setting(sid, 900)
+    alt = {"name": "30min", "settingValue": {"value": 1800}}
+
+    swapped = swap_alt_value(setting, alt)
+    assert swapped["settingInstance"]["simpleSettingValue"]["value"] == 1800
+    # Original should be unmodified
+    assert setting["settingInstance"]["simpleSettingValue"]["value"] == 900
+
+
+def test_swap_value_collection():
+    """Collection setting value swap should replace the entire SID array."""
+    from split_cis_policies import swap_alt_value
+
+    sid = "device_vendor_msft_policy_config_userrights_createsymboliclinks"
+    setting = _make_collection_setting(sid, ["*S-1-5-32-544"])
+    alt = {"name": "admins-hyperv", "settingValue": {"value": ["*S-1-5-32-544", "*S-1-5-83-0"]}}
+
+    swapped = swap_alt_value(setting, alt)
+    coll = swapped["settingInstance"]["simpleSettingCollectionValue"]
+    assert len(coll) == 2
+    assert coll[0]["value"] == "*S-1-5-32-544"
+    assert coll[1]["value"] == "*S-1-5-83-0"
+    assert coll[0]["@odata.type"] == "#microsoft.graph.deviceManagementConfigurationStringSettingValue"
+    # Original should be unmodified
+    assert len(setting["settingInstance"]["simpleSettingCollectionValue"]) == 1
+
+
+def test_swap_value_null_skipped():
+    """Null settingValue should return a deep copy without swap."""
+    from split_cis_policies import swap_alt_value
+
+    sid = "device_vendor_msft_policy_config_userrights_debugprograms"
+    setting = _make_collection_setting(sid, ["*S-1-5-32-544"])
+    alt = {"name": "admins-debuggers", "settingValue": None}
+
+    swapped = swap_alt_value(setting, alt)
+    # Should be a copy of original, no swap
+    assert len(swapped["settingInstance"]["simpleSettingCollectionValue"]) == 1
+
+
+def test_swap_value_child_integer():
+    """Value swap for a child setting inside a parent wrapper."""
+    from split_cis_policies import swap_alt_value
+
+    parent_sid = "device_vendor_msft_policy_config_devicelock_devicepasswordenabled"
+    child_sid = "device_vendor_msft_policy_config_devicelock_maxinactivitytimedevicelock"
+
+    child = {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationSimpleSettingInstance",
+        "settingDefinitionId": child_sid,
+        "settingInstanceTemplateReference": None,
+        "simpleSettingValue": {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationIntegerSettingValue",
+            "settingValueTemplateReference": None,
+            "value": 15,
+        },
+    }
+
+    setting = _make_choice_setting(parent_sid, parent_sid + "_0", [child])
+    alt = {"name": "30min", "settingValue": {"value": 30}}
+
+    swapped = swap_alt_value(setting, alt, target_child_sid=child_sid)
+    swapped_child = swapped["settingInstance"]["choiceSettingValue"]["children"][0]
+    assert swapped_child["simpleSettingValue"]["value"] == 30
+    # Original should be unmodified
+    assert child["simpleSettingValue"]["value"] == 15
