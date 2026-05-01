@@ -6,7 +6,7 @@
     "CIS (L1) Autopilot - Windows 11 Intune 4.0.0"
   ],
   "scopeTags": {
-    "readonly": "001-readonly",
+    "readonly": "001",
     "exceptionable": "001"
   },
   "assignmentGroup": "001i-test-security-baseline",

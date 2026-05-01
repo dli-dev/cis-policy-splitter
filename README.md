@@ -70,7 +70,7 @@ The full decision log is in [`cis-control-decisions.md`](cis-control-decisions.m
 
 Exceptionable policies use Intune RBAC for departmental self-service:
 
-- **Baseline** policies → scope tag `001-readonly` — dept admins can see but not modify
+- **Baseline** policies → scope tag `001` — dept admins can manage assignments for their groups
 - **Exceptionable** policies → scope tag `001` — dept admins can manage assignments for their groups
 - Departments exclude their device group from the exceptionable baseline and include it on the alternative
 
@@ -127,7 +127,7 @@ Each manifest entry specifies `file`, `type` (baseline/autopilot/exceptionable/a
   "skipFiles": ["CIS (L1) Windows Update (103) - ..."],  // Skip entire files
   "autopilotPolicies": ["CIS (L1) Autopilot - ..."],     // Assign to All Users
   "scopeTags": {
-    "readonly": "001-readonly",    // Baselines
+    "readonly": "001",             // Baselines
     "exceptionable": "001"         // Exceptionable + alternatives
   },
   "controls": {

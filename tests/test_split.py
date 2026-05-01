@@ -64,7 +64,7 @@ def test_load_config_skip_files():
 
     assert "CIS (L1) Windows Update (103) - Windows 11 Intune 4.0.0 " in config["skipFiles"]
     assert "CIS (L1) Autopilot - Windows 11 Intune 4.0.0" in config["autopilotPolicies"]
-    assert config["scopeTags"]["readonly"] == "001-readonly"
+    assert config["scopeTags"]["readonly"] == "001"
     assert config["scopeTags"]["exceptionable"] == "001"
 
 
@@ -424,14 +424,14 @@ def test_build_output_policy():
         name="CIS L1 - Some Policy",
         description="test desc",
         source_policy=source,
-        scope_tag="001-readonly",
+        scope_tag="001",
         settings=settings,
     )
 
     assert policy["name"] == "CIS L1 - Some Policy"
     assert policy["description"] == "test desc"
     assert policy["platforms"] == "windows10"
-    assert policy["roleScopeTagIds"] == ["001-readonly"]
+    assert policy["roleScopeTagIds"] == ["001"]
     assert policy["settings"] == settings
     # Should NOT contain Graph metadata
     assert "@odata.context" not in policy
