@@ -4,3 +4,5 @@ __pycache__/
 .venv/
 output/
 .pytest_cache/
+deployment-log.json
+cis-policies-prod.csv
