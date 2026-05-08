@@ -15,8 +15,23 @@
   "_doNotDeploy_note": "49.9 and 49.10 are also in controls as rejects so the splitter drops them",
   "controls": {
 
-    "_comment_exceptionable": "=== EXCEPTIONABLE — Settings Catalog (14 settings, 15 entries counting paired 26.7+49.8) ===",
+    "_comment_exceptionable": "=== EXCEPTIONABLE — Settings Catalog (15 settings, 16 entries counting paired 26.7+49.8) ===",
 
+    "26.6": {
+      "disposition": "exceptionable",
+      "description": "Max Device Password Failed Attempts (child of Device Lock)",
+      "settingDefinitionId": "device_vendor_msft_policy_config_devicelock_maxdevicepasswordfailedattempts",
+      "isChild": true,
+      "baselineValue": { "value": 10 },
+      "_baselineValue_note": "CIS source value is 5 attempts. UofT adopts the legacy MDM Security Baseline value of 10 (action-plan-001 Phase 1.2 / decision tracker A.5 #25). Disposition is exceptionable so delegated units can lower to 5 (CIS default) if they choose.",
+      "alternatives": [
+        {
+          "name": "cis-default-5",
+          "description": "5 failed attempts before factory reset (CIS default)",
+          "settingValue": { "value": 5 }
+        }
+      ]
+    },
     "26.7": {
       "disposition": "exceptionable",
       "description": "Max Inactivity Time Device Lock (child of Device Lock)",

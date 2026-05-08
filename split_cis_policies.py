@@ -480,6 +480,23 @@ def process_file(
             })
             continue
 
+        # Apply baselineValue override (if any) before writing the standalone
+        # exceptionable baseline. Walk the lookup by cis_rec since the control
+        # entry may be keyed by a child SID we didn't carry through.
+        ctrl_by_rec = next(
+            (c for c in lookup.values() if c["cis_rec"] == ext["cis_rec"]),
+            None,
+        )
+        baseline_setting = ext["setting"]
+        if ctrl_by_rec and ctrl_by_rec.get("baseline_value"):
+            fake_alt = {
+                "name": "_baseline",
+                "settingValue": ctrl_by_rec["baseline_value"],
+            }
+            baseline_setting = swap_alt_value(
+                ext["setting"], fake_alt, target_child_sid=target_child_sid
+            )
+
         # Exceptionable baseline
         exc_name = f"CIS {ext['cis_rec']} - {ext['description']} - Baseline"
         exc_policy = build_output_policy(
@@ -487,7 +504,7 @@ def process_file(
             description=f"CIS {ext['cis_rec']} exceptionable baseline: {ext['description']}",
             source_policy=policy,
             scope_tag=config["scopeTags"]["exceptionable"],
-            settings=[ext["setting"]],
+            settings=[baseline_setting],
         )
 
         safe_name = _sanitize_filename(exc_name)
