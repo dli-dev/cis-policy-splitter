@@ -22,6 +22,8 @@
       "description": "Max Inactivity Time Device Lock (child of Device Lock)",
       "settingDefinitionId": "device_vendor_msft_policy_config_devicelock_maxinactivitytimedevicelock",
       "isChild": true,
+      "baselineValue": { "value": 10 },
+      "_baselineValue_note": "CIS source value is 15 min; UofT committee amendment 2026-05-06 sets baseline to 10 min to match 49.8.",
       "alternatives": [
         {
           "name": "30min",
@@ -40,6 +42,8 @@
       "description": "Interactive Logon Machine Inactivity Limit",
       "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_interactivelogon_machineinactivitylimit_v2",
       "isChild": false,
+      "baselineValue": { "value": 600 },
+      "_baselineValue_note": "CIS source value is 900s (15 min); UofT committee amendment 2026-05-06 sets baseline to 600s (10 min).",
       "alternatives": [
         {
           "name": "30min",
@@ -362,6 +366,20 @@
       "cisValue": "XTS-AES 128-bit",
       "ourValue": "XTS-AES 256-bit",
       "modifiedValue": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsrdvdropdown_name_7"
+    }
+  },
+  "bundles": {
+    "_comment": "=== BUNDLES — group multiple exceptionable controls into one policy per tier ===",
+
+    "inactivity-lock": {
+      "name": "CIS Inactivity Lock",
+      "description": "Bundles 49.8 (interactive-logon machine inactivity) and 26.7 (device-lock max inactivity) into one policy per tier so both CSP nodes are written together.",
+      "controls": ["49.8", "26.7"],
+      "tiers": [
+        { "name": "Baseline", "alts": {} },
+        { "name": "Alt (30min)",    "alts": { "49.8": "30min",    "26.7": "30min" } },
+        { "name": "Alt (disabled)", "alts": { "49.8": "disabled", "26.7": "disabled" } }
+      ]
     }
   },
   "serviceControls": {

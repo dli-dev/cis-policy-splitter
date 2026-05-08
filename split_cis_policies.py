@@ -14,13 +14,14 @@ import re
 from pathlib import Path
 
 
-def load_config(config_path: str) -> tuple[dict, dict]:
-    """Load the control decisions config and build a settingDefinitionId lookup.
+def load_config(config_path: str) -> tuple[dict, dict, dict]:
+    """Load the control decisions config and build lookups.
 
     Returns:
-        (config, lookup) where:
+        (config, lookup, bundle_lookup) where:
         - config is the raw config dict
         - lookup maps settingDefinitionId -> control info dict
+        - bundle_lookup maps cis_rec -> bundle_id (only for bundled controls)
     """
     with open(config_path, encoding="utf-8-sig") as f:
         config = json.load(f)
@@ -45,9 +46,22 @@ def load_config(config_path: str) -> tuple[dict, dict]:
             "is_child": ctrl.get("isChild", False),
             "alternatives": ctrl.get("alternatives", []),
             "modified_value": ctrl.get("modifiedValue"),
+            "baseline_value": ctrl.get("baselineValue"),
         }
 
-    return config, lookup
+    bundle_lookup = {}
+    for bundle_id, bundle in config.get("bundles", {}).items():
+        if bundle_id.startswith("_"):
+            continue
+        for ctrl_rec in bundle.get("controls", []):
+            if ctrl_rec in bundle_lookup:
+                raise ValueError(
+                    f"Control {ctrl_rec} appears in multiple bundles "
+                    f"({bundle_lookup[ctrl_rec]} and {bundle_id})"
+                )
+            bundle_lookup[ctrl_rec] = bundle_id
+
+    return config, lookup, bundle_lookup
 
 
 def _process_children(children: list[dict], lookup: dict) -> dict:
@@ -376,11 +390,22 @@ def process_file(
     assignment_group: str | None = None,
     autopilot_assignment_group: str | None = None,
     dry_run: bool = False,
+    bundle_lookup: dict | None = None,
+    bundled_extracts: dict | None = None,
 ) -> list[dict]:
     """Process a single CIS Build Kit JSON file.
 
     Returns a list of manifest entries.
+
+    Bundled exceptionable extractions are stashed into ``bundled_extracts``
+    (keyed by bundle_id) instead of being written as standalone policies. The
+    caller is responsible for emitting the bundled outputs after all files
+    have been processed.
     """
+    if bundle_lookup is None:
+        bundle_lookup = {}
+    if bundled_extracts is None:
+        bundled_extracts = {}
     with open(filepath, encoding="utf-8-sig") as f:
         policy = json.load(f)
 
@@ -430,6 +455,31 @@ def process_file(
 
     # --- Write exceptionable + alternatives ---
     for ext in result["extracted"]:
+        # Determine if this is a child extraction (need target_child_sid for swap)
+        target_child_sid = None
+        ctrl_for_ext = lookup.get(ext["setting"]["settingInstance"]["settingDefinitionId"])
+        if not ctrl_for_ext or ctrl_for_ext.get("cis_rec") != ext["cis_rec"]:
+            # The extracted setting's top-level SID doesn't match the control —
+            # this is a child extraction with parent wrapper
+            for sid, ctrl in lookup.items():
+                if ctrl["cis_rec"] == ext["cis_rec"] and ctrl["is_child"]:
+                    target_child_sid = sid
+                    break
+
+        # If this control belongs to a bundle, defer emission to the bundle
+        # writer (called from main after all files are processed).
+        bundle_id = bundle_lookup.get(ext["cis_rec"])
+        if bundle_id:
+            bundled_extracts.setdefault(bundle_id, []).append({
+                "cis_rec": ext["cis_rec"],
+                "description": ext["description"],
+                "setting": ext["setting"],
+                "alternatives": ext["alternatives"],
+                "target_child_sid": target_child_sid,
+                "source_policy": policy,
+            })
+            continue
+
         # Exceptionable baseline
         exc_name = f"CIS {ext['cis_rec']} - {ext['description']} - Baseline"
         exc_policy = build_output_policy(
@@ -454,18 +504,6 @@ def process_file(
             "type": "exceptionable",
             "assignTo": assignment_group,
         })
-
-        # Alternatives
-        # Determine if this is a child extraction (need target_child_sid for swap)
-        target_child_sid = None
-        ctrl_for_ext = lookup.get(ext["setting"]["settingInstance"]["settingDefinitionId"])
-        if not ctrl_for_ext or ctrl_for_ext.get("cis_rec") != ext["cis_rec"]:
-            # The extracted setting's top-level SID doesn't match the control —
-            # this is a child extraction with parent wrapper
-            for sid, ctrl in lookup.items():
-                if ctrl["cis_rec"] == ext["cis_rec"] and ctrl["is_child"]:
-                    target_child_sid = sid
-                    break
 
         for alt in ext.get("alternatives", []):
             if not alt:
@@ -500,6 +538,120 @@ def process_file(
     return manifest_entries
 
 
+def emit_bundles(
+    bundles_config: dict,
+    bundled_extracts: dict,
+    config: dict,
+    lookup: dict,
+    output_dir: str,
+    assignment_group: str | None,
+    dry_run: bool,
+) -> list[dict]:
+    """Emit one policy per (bundle × tier).
+
+    For each bundle, build a single policy per tier that combines all the
+    bundle's controls. Each control is swapped to its tier-specific value:
+    the tier's ``alts`` map names the alt to use; controls absent from the
+    map use baseline (with optional ``baselineValue`` override).
+    """
+    manifest_entries = []
+    ctrl_by_rec = {ctrl["cis_rec"]: ctrl for ctrl in lookup.values()}
+    scope_tag = config["scopeTags"]["exceptionable"]
+
+    for bundle_id, bundle in bundles_config.items():
+        if bundle_id.startswith("_"):
+            continue
+
+        extracts = bundled_extracts.get(bundle_id, [])
+        if not extracts:
+            continue
+
+        extracts_by_rec = {e["cis_rec"]: e for e in extracts}
+        # Use the first extract's source policy as the templateReference donor.
+        # All bundle members must share platforms/technologies; we trust the
+        # config author to bundle compatible controls.
+        source_policy = extracts[0]["source_policy"]
+
+        for tier_idx, tier in enumerate(bundle.get("tiers", [])):
+            tier_name = tier["name"]
+            alts_map = tier.get("alts", {})
+
+            settings = []
+            for ctrl_rec in bundle["controls"]:
+                ext = extracts_by_rec.get(ctrl_rec)
+                if not ext:
+                    print(
+                        f"  WARN: bundle '{bundle_id}' tier '{tier_name}' "
+                        f"missing extract for control {ctrl_rec} — skipped"
+                    )
+                    continue
+
+                target_child_sid = ext["target_child_sid"]
+                ctrl = ctrl_by_rec.get(ctrl_rec)
+
+                if ctrl_rec in alts_map:
+                    alt_name = alts_map[ctrl_rec]
+                    matching_alt = next(
+                        (a for a in ext["alternatives"] if a.get("name") == alt_name),
+                        None,
+                    )
+                    if not matching_alt:
+                        raise ValueError(
+                            f"Bundle '{bundle_id}' tier '{tier_name}' references "
+                            f"alt '{alt_name}' for {ctrl_rec}, but no such alt exists"
+                        )
+                    swapped = swap_alt_value(
+                        ext["setting"], matching_alt, target_child_sid=target_child_sid
+                    )
+                else:
+                    # Baseline tier — apply baseline_value override if defined,
+                    # else keep the source value as-is.
+                    if ctrl and ctrl.get("baseline_value"):
+                        fake_alt = {
+                            "name": "_baseline",
+                            "settingValue": ctrl["baseline_value"],
+                        }
+                        swapped = swap_alt_value(
+                            ext["setting"], fake_alt, target_child_sid=target_child_sid
+                        )
+                    else:
+                        swapped = copy.deepcopy(ext["setting"])
+
+                # Renumber id to position in the bundle's settings array
+                swapped = copy.deepcopy(swapped)
+                swapped["id"] = str(len(settings))
+                settings.append(swapped)
+
+            policy_name = f"{bundle['name']} - {tier_name}"
+            policy = build_output_policy(
+                name=policy_name,
+                description=f"{bundle.get('description', '')} ({tier_name})".strip(),
+                source_policy=source_policy,
+                scope_tag=scope_tag,
+                settings=settings,
+            )
+
+            safe_name = _sanitize_filename(policy_name)
+            rel_path = f"exceptionable/{safe_name}.json"
+            full_path = Path(output_dir) / rel_path
+
+            if not dry_run:
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(full_path, "w", encoding="utf-8") as f:
+                    json.dump(policy, f, indent=2, ensure_ascii=False)
+
+            # First tier (Baseline) is the assigned exceptionable policy;
+            # subsequent tiers are alternatives with no default assignment.
+            entry_type = "exceptionable" if tier_idx == 0 else "alternative"
+            manifest_entries.append({
+                "file": rel_path,
+                "type": entry_type,
+                "assignTo": assignment_group if tier_idx == 0 else None,
+            })
+
+    return manifest_entries
+
+
 def main(
     path: str,
     config_path: str,
@@ -507,7 +659,7 @@ def main(
     dry_run: bool = False,
 ) -> None:
     """Main entry point: process all files and write manifest."""
-    config, lookup = load_config(config_path)
+    config, lookup, bundle_lookup = load_config(config_path)
 
     # Resolve input files
     p = Path(path)
@@ -531,10 +683,33 @@ def main(
     print(f"Found {len(json_files)} JSON file(s)")
 
     all_manifest = []
+    bundled_extracts: dict[str, list[dict]] = {}
 
     for jf in json_files:
-        entries = process_file(str(jf), config, lookup, output_dir, assignment_group, autopilot_assignment_group, dry_run)
+        entries = process_file(
+            str(jf),
+            config,
+            lookup,
+            output_dir,
+            assignment_group,
+            autopilot_assignment_group,
+            dry_run,
+            bundle_lookup=bundle_lookup,
+            bundled_extracts=bundled_extracts,
+        )
         all_manifest.extend(entries)
+
+    # Emit bundles (one policy per tier, combining all bundle members).
+    bundle_entries = emit_bundles(
+        config.get("bundles", {}),
+        bundled_extracts,
+        config,
+        lookup,
+        output_dir,
+        assignment_group,
+        dry_run,
+    )
+    all_manifest.extend(bundle_entries)
 
     # Write manifest
     if not dry_run:

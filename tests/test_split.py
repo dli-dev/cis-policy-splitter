@@ -13,10 +13,13 @@ def test_load_config_builds_lookup():
     from split_cis_policies import load_config
 
     config_path = Path(__file__).resolve().parent.parent / "cis-control-config.json"
-    config, lookup = load_config(str(config_path))
+    config, lookup, bundle_lookup = load_config(str(config_path))
 
     # Should have all non-comment controls
     assert len(lookup) > 0
+    # Bundled controls should appear in bundle_lookup
+    assert bundle_lookup.get("49.8") == "inactivity-lock"
+    assert bundle_lookup.get("26.7") == "inactivity-lock"
 
     # Check a known exceptionable control
     sid_49_1 = "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_enableguestaccountstatus"
@@ -60,7 +63,7 @@ def test_load_config_skip_files():
     from split_cis_policies import load_config
 
     config_path = Path(__file__).resolve().parent.parent / "cis-control-config.json"
-    config, _ = load_config(str(config_path))
+    config, _, _ = load_config(str(config_path))
 
     assert "CIS (L1) Windows Update (103) - Windows 11 Intune 4.0.0 " in config["skipFiles"]
     assert "CIS (L1) Autopilot - Windows 11 Intune 4.0.0" in config["autopilotPolicies"]
@@ -454,15 +457,18 @@ def test_process_file_end_to_end(tmp_path):
         / "CIS (L1) User Rights (89) - Windows 11 Intune 4.0.0.json"
     )
 
-    config, lookup = load_config(str(config_path))
+    config, lookup, _ = load_config(str(config_path))
     manifest = process_file(str(source_path), config, lookup, str(tmp_path), dry_run=False)
 
-    # Should have 1 baseline + 3 exceptionable baselines (89.10, 89.12, 89.14) + 3 alts
+    # Should have 1 baseline + 3 exceptionable baselines (89.10, 89.12, 89.14) + 2 alts.
+    # 89.10 has 1 alt (admins-hyperv); 89.12 has 1 alt (admins-debuggers, with null
+    # settingValue — emitted as a non-swapped placeholder); 89.14 has no alts because
+    # Graph rejects empty simpleSettingCollectionValue.
     assert any(e["type"] == "baseline" for e in manifest)
     exc_baselines = [e for e in manifest if e["type"] == "exceptionable"]
     assert len(exc_baselines) == 3
     alts = [e for e in manifest if e["type"] == "alternative"]
-    assert len(alts) == 3
+    assert len(alts) == 2
 
     # Baseline file should exist
     bl = [e for e in manifest if e["type"] == "baseline"][0]
@@ -512,8 +518,21 @@ def test_batch_mode(tmp_path):
     names = [e["file"] for e in manifest]
     assert not any("Windows Update" in n for n in names)
 
-    # Autopilot should be tagged AllUsers
+    # Autopilot should be tagged with the configured autopilot assignment group
     autopilot = [e for e in manifest if "Autopilot" in e["file"]]
     assert len(autopilot) == 1
-    assert autopilot[0]["assignTo"] == "AllUsers"
+    assert autopilot[0]["assignTo"] == "001i-test-security-baseline-user"
     assert autopilot[0]["type"] == "autopilot"
+
+    # Inactivity-lock bundle should produce 3 paired policies (Baseline + 2 alts)
+    inactivity = [e for e in manifest if "Inactivity Lock" in e["file"]]
+    assert len(inactivity) == 3
+    inactivity_baseline = [e for e in inactivity if e["type"] == "exceptionable"]
+    assert len(inactivity_baseline) == 1
+    assert inactivity_baseline[0]["assignTo"] == "001i-test-security-baseline"
+    inactivity_alts = [e for e in inactivity if e["type"] == "alternative"]
+    assert len(inactivity_alts) == 2
+
+    # Standalone 49.8 / 26.7 outputs should NOT exist (they were bundled)
+    assert not any("49.8" in n for n in names)
+    assert not any("26.7" in n for n in names)
