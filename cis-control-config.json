@@ -381,6 +381,46 @@
       "cisValue": "XTS-AES 128-bit",
       "ourValue": "XTS-AES 256-bit",
       "modifiedValue": "device_vendor_msft_bitlocker_encryptionmethodbydrivetype_encryptionmethodwithxtsrdvdropdown_name_7"
+    },
+    "A.4.19": {
+      "disposition": "modified",
+      "description": "ASR: Block Office apps from creating child processes",
+      "settingDefinitionId": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockallofficeapplicationsfromcreatingchildprocesses",
+      "isChild": true,
+      "cisValue": "Audit",
+      "ourValue": "Block",
+      "modifiedValue": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockallofficeapplicationsfromcreatingchildprocesses_block",
+      "_note": "LHS = block; CIS L1 - Defender ships audit. Decision tracker A.4 #19 (2026-05-07) keeps LHS block-mode."
+    },
+    "A.4.20": {
+      "disposition": "modified",
+      "description": "ASR: Block Office communication apps from creating child processes",
+      "settingDefinitionId": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockofficecommunicationappfromcreatingchildprocesses",
+      "isChild": true,
+      "cisValue": "Audit",
+      "ourValue": "Block",
+      "modifiedValue": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockofficecommunicationappfromcreatingchildprocesses_block",
+      "_note": "LHS = enable (=block); CIS L1 - Defender ships audit. Decision tracker A.4 #20 (2026-05-07) keeps LHS block-mode."
+    },
+    "A.4.21": {
+      "disposition": "modified",
+      "description": "ASR: Block Win32 API calls from Office macros",
+      "settingDefinitionId": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockwin32apicallsfromofficemacros",
+      "isChild": true,
+      "cisValue": "Block",
+      "ourValue": "Audit",
+      "modifiedValue": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockwin32apicallsfromofficemacros_audit",
+      "_note": "Rule GUID 92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B. LHS = auditMode; CIS L1 - Defender ships block. Decision tracker A.4 #21 (2026-05-07) keeps LHS audit-mode for 30–60 days while telemetry is collected, then flips to block. Replaces earlier override-policy approach (action-plan-001 Phase 2.2) which was unreliable due to ASR most-restrictive-wins conflict resolution."
+    },
+    "A.4.22": {
+      "disposition": "modified",
+      "description": "ASR: Block execution of potentially obfuscated scripts",
+      "settingDefinitionId": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockexecutionofpotentiallyobfuscatedscripts",
+      "isChild": true,
+      "cisValue": "Audit",
+      "ourValue": "Block",
+      "modifiedValue": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockexecutionofpotentiallyobfuscatedscripts_block",
+      "_note": "LHS = block; CIS L1 - Defender ships audit. Decision tracker A.4 #22 (2026-05-07) keeps LHS block-mode."
     }
   },
   "bundles": {

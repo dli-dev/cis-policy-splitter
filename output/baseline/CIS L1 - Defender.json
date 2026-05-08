@@ -138,7 +138,7 @@
                 "settingInstanceTemplateReference": null,
                 "choiceSettingValue": {
                   "settingValueTemplateReference": null,
-                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockallofficeapplicationsfromcreatingchildprocesses_audit",
+                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockallofficeapplicationsfromcreatingchildprocesses_block",
                   "children": []
                 }
               },
@@ -178,7 +178,7 @@
                 "settingInstanceTemplateReference": null,
                 "choiceSettingValue": {
                   "settingValueTemplateReference": null,
-                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockexecutionofpotentiallyobfuscatedscripts_audit",
+                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockexecutionofpotentiallyobfuscatedscripts_block",
                   "children": []
                 }
               },
@@ -218,7 +218,7 @@
                 "settingInstanceTemplateReference": null,
                 "choiceSettingValue": {
                   "settingValueTemplateReference": null,
-                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockofficecommunicationappfromcreatingchildprocesses_audit",
+                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockofficecommunicationappfromcreatingchildprocesses_block",
                   "children": []
                 }
               },
@@ -258,7 +258,7 @@
                 "settingInstanceTemplateReference": null,
                 "choiceSettingValue": {
                   "settingValueTemplateReference": null,
-                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockwin32apicallsfromofficemacros_block",
+                  "value": "device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockwin32apicallsfromofficemacros_audit",
                   "children": []
                 }
               },

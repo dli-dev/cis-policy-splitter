@@ -57,7 +57,7 @@ CIS #            Setting                                  Reason
 
 ---
 
-## Modified Value — deploy with non-CIS value (4)
+## Modified Value — deploy with non-CIS value (8)
 
 ```
 CIS #         Setting                                CIS Value                        Our Value
@@ -65,11 +65,19 @@ CIS #         Setting                                CIS Value                  
 4.11.7.2.9    Require additional auth at startup     Enabled (paired w/ require-PIN)  Enabled (TPM-only required; PIN/key/PIN+key forbidden)
 4.11.7.2.12   Configure TPM startup PIN              Require startup PIN with TPM     Do not allow startup PIN with TPM
 4.11.7.2.13   Configure TPM startup                  Do not allow TPM                 Require TPM
+A.4.19        ASR: Office apps → child procs         Audit                            Block
+A.4.20        ASR: Office comm apps → child procs    Audit                            Block
+A.4.21        ASR: Win32 API calls from Office macro Block                            Audit (revisit after 30–60d telemetry)
+A.4.22        ASR: Obfuscated JS/VBS scripts         Audit                            Block
 ```
 
 49.29: non-exceptionable, scope tag 001. Using LAPS account for elevation.
 
 4.11.7.2.9 / .12 / .13: previously rejected wholesale because CIS pairs the parent toggle with require-PIN, which breaks Autopilot/silent BitLocker. Reframed: keep the parent enabled (so devices can't downgrade to no startup auth), but require TPM-only and forbid PIN/key/PIN+key/non-TPM. The three currently-untracked siblings (TPM+key, TPM+PIN+key, non-TPM) accept upstream CIS `_0` (Do not allow) by default and so are not separately listed in cis-control-config.json.
+
+A.4.19 / .20 / .22: ASR rules where LHS sets Block and CIS L1 - Defender ships Audit. Decision tracker A.4 (2026-05-07) keeps LHS block-mode for all three.
+
+A.4.21 (Block Win32 API calls from Office macros, rule GUID 92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B): goes the other direction — CIS ships Block and UofT picks Audit for the 30–60 day telemetry window before flipping to Block. Implemented as a CIS-source modification (rather than an override policy that fights ASR most-restrictive-wins conflict resolution). After audit review, swap `modifiedValue` to `_block` to flip.
 
 ---
 
