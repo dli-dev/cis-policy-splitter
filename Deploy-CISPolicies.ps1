@@ -70,8 +70,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Files') {
     $deployItems = @()
     foreach ($entry in $manifest) {
         $deployItems += @{
-            File     = (Join-Path $manifestDir $entry.file)
-            AssignTo = if ($entry.PSObject.Properties['assignTo']) { $entry.assignTo } else { $null }
+            File          = (Join-Path $manifestDir $entry.file)
+            AssignTo      = if ($entry.PSObject.Properties['assignTo']) { $entry.assignTo } else { $null }
+            ExcludeGroups = if ($entry.PSObject.Properties['excludeGroups']) { @($entry.excludeGroups) } else { @() }
         }
     }
     Write-Host "Loaded manifest: $($deployItems.Count) policies" -ForegroundColor Gray
@@ -141,26 +142,62 @@ function Resolve-GroupId {
 # ---------------------------------------------------------------------------
 # 4. Policy creation and assignment
 # ---------------------------------------------------------------------------
+# Cache of existing configurationPolicies keyed by exact name (one Graph round
+# trip up front instead of N OData $filter calls — the previous per-policy
+# filter silently failed on names containing spaces / parens and produced
+# duplicates).
+$existingPoliciesByName = @{}
+
+function Initialize-ExistingPolicyCache {
+    if ($WhatIfPreference) { return }
+    Write-Host "Fetching existing configuration policies..." -ForegroundColor Gray
+    $uri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies?`$select=id,name&`$top=999"
+    $count = 0
+    while ($uri) {
+        $response = Invoke-MgGraphRequest -Method GET -Uri $uri
+        foreach ($p in $response.value) {
+            $key = $p.name
+            if (-not $existingPoliciesByName.ContainsKey($key)) {
+                $existingPoliciesByName[$key] = @()
+            }
+            $existingPoliciesByName[$key] += $p.id
+            $count++
+        }
+        # Hashtable index access returns $null for missing keys even under
+        # StrictMode v2, unlike dot notation which throws.
+        $uri = $response['@odata.nextLink']
+    }
+    $duplicateNames = @($existingPoliciesByName.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 })
+    Write-Host "  Cached $count existing policies ($($existingPoliciesByName.Count) unique names)" -ForegroundColor Gray
+    if ($duplicateNames.Count -gt 0) {
+        Write-Warning "Tenant already contains $($duplicateNames.Count) duplicate policy name(s):"
+        foreach ($d in $duplicateNames) {
+            Write-Warning "  '$($d.Key)' -> $($d.Value.Count) copies: $($d.Value -join ', ')"
+        }
+    }
+}
+
 function Find-ExistingPolicy {
     param([string]$PolicyName)
     if ($WhatIfPreference) { return $null }
-    try {
-        $encodedName = $PolicyName -replace "'", "''"
-        $uri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies?`$filter=name eq '$encodedName'&`$select=id,name"
-        $response = Invoke-MgGraphRequest -Method GET -Uri $uri
-        if ($response.value -and $response.value.Count -gt 0) { return $response.value[0] }
-    } catch {}
+    if ($existingPoliciesByName.ContainsKey($PolicyName)) {
+        return @{ id = $existingPoliciesByName[$PolicyName][0]; name = $PolicyName }
+    }
     return $null
 }
 
 function New-IntunePolicy {
-    param([hashtable]$PolicyBody, [string]$AssignTo)
+    param([hashtable]$PolicyBody, [string]$AssignTo, $ExcludeGroups = @())
+
+    # Normalize: PS param binding can collapse empty arrays to $null and breaks .Count later.
+    $ExcludeGroups = @($ExcludeGroups | Where-Object { $_ })
 
     $policyName = $PolicyBody.name
     $result = @{ Name = $policyName; Id = $null; Created = $false; Skipped = $false; Assigned = $false; Error = $null }
 
     if ($WhatIfPreference) {
-        $assignMsg = if ($AssignTo) { " (assign: $AssignTo)" } else { "" }
+        $assignMsg = if ($AssignTo) { " (include: $AssignTo)" } else { "" }
+        if ($ExcludeGroups.Count -gt 0) { $assignMsg += " (exclude: $($ExcludeGroups -join ', '))" }
         Write-Host "  [WhatIf] Would create: $policyName$assignMsg" -ForegroundColor DarkYellow
         $result.Id = 'WHATIF-ID'
         return $result
@@ -184,26 +221,46 @@ function New-IntunePolicy {
         return $result
     }
 
-    # Assign to group if specified
-    if ($AssignTo -and $result.Id) {
-        $gid = Resolve-GroupId -GroupName $AssignTo
-        if ($gid) {
-            try {
-                $assignBody = @{
-                    assignments = @(@{
-                        target = @{
-                            '@odata.type' = '#microsoft.graph.groupAssignmentTarget'
-                            groupId       = $gid
-                        }
-                    })
+    # Build assignment targets (one include + zero-or-more excludes)
+    $assignmentTargets = @()
+
+    if ($AssignTo) {
+        $includeGid = Resolve-GroupId -GroupName $AssignTo
+        if ($includeGid) {
+            $assignmentTargets += @{
+                target = @{
+                    '@odata.type' = '#microsoft.graph.groupAssignmentTarget'
+                    groupId       = $includeGid
                 }
-                Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assign" -Body ($assignBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
-                $result.Assigned = $true
-                Write-Host "  ASSIGNED: $policyName -> $AssignTo" -ForegroundColor Green
-            } catch {
-                Write-Warning "Failed to assign '$policyName': $($_.Exception.Message)"
-                $result.Error = "Assignment failed: $($_.Exception.Message)"
             }
+        }
+    }
+
+    foreach ($exGroup in $ExcludeGroups) {
+        if (-not $exGroup) { continue }
+        $exGid = Resolve-GroupId -GroupName $exGroup
+        if ($exGid) {
+            $assignmentTargets += @{
+                target = @{
+                    '@odata.type' = '#microsoft.graph.exclusionGroupAssignmentTarget'
+                    groupId       = $exGid
+                }
+            }
+        }
+    }
+
+    if ($result.Id -and $assignmentTargets.Count -gt 0) {
+        try {
+            $assignBody = @{ assignments = $assignmentTargets }
+            Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assign" -Body ($assignBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
+            $result.Assigned = $true
+            $assignSummary = @()
+            if ($AssignTo) { $assignSummary += "include: $AssignTo" }
+            if ($ExcludeGroups.Count -gt 0) { $assignSummary += "exclude: $($ExcludeGroups -join ', ')" }
+            Write-Host "  ASSIGNED: $policyName -> $($assignSummary -join '; ')" -ForegroundColor Green
+        } catch {
+            Write-Warning "Failed to assign '$policyName': $($_.Exception.Message)"
+            $result.Error = "Assignment failed: $($_.Exception.Message)"
         }
     }
 
@@ -227,6 +284,8 @@ if (-not $WhatIfPreference) {
 } else {
     Write-Host "[WhatIf] Would connect to Microsoft Graph ($Tenant`: $tenantDomain)" -ForegroundColor DarkYellow
 }
+
+Initialize-ExistingPolicyCache
 
 # ---------------------------------------------------------------------------
 # 6. Confirmation
@@ -268,11 +327,11 @@ foreach ($item in $deployItems) {
     $policyBody.roleScopeTagIds = $resolvedTags
 
     Write-Host "`n$($policyBody.name)" -ForegroundColor White
-    $result = New-IntunePolicy -PolicyBody $policyBody -AssignTo $item.AssignTo
+    $result = New-IntunePolicy -PolicyBody $policyBody -AssignTo $item.AssignTo -ExcludeGroups $item.ExcludeGroups
 
     [void]$deploymentLog.Add([ordered]@{
         name = $result.Name; id = $result.Id; file = $item.File
-        assignTo = $item.AssignTo; created = $result.Created
+        assignTo = $item.AssignTo; excludeGroups = @($item.ExcludeGroups); created = $result.Created
         skipped = $result.Skipped; assigned = $result.Assigned; error = $result.Error
     })
 
