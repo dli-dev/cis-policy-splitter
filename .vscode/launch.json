@@ -121,6 +121,29 @@
         "-Tenant", "Prod",
         "-GroupName", "9047i-dw-win-autopilot-devices"
       ]
+    },
+    {
+      "name": "Split CIS Services",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/split_cis_services.py",
+      "args": [
+        "--source", "${workspaceFolder}/IntuneWindows11v4.0.0/System Service Scripts",
+        "--config", "${workspaceFolder}/cis-control-config.json",
+        "--output", "${workspaceFolder}/output"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Deploy Services: TestMode",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/Deploy-CISServices.ps1",
+      "args": [
+        "-Tenant", "Prod",
+        "-ManifestFile", "${workspaceFolder}/output/manifest.json",
+        "-TestMode"
+      ]
     }
   ]
 }

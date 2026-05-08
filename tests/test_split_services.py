@@ -64,20 +64,41 @@ def test_classify_services():
     assert result["rejected"] == 1
 
 
-def test_generate_service_script():
-    """Generated script should contain correct hashtable entries."""
-    from split_cis_services import generate_service_script
+def test_generate_detect_script():
+    """Detection script should check compliance and exit 0/1."""
+    from split_cis_services import generate_detect_script
 
     services = {
         "Computer Browser": r"HKLM:\SYSTEM\CurrentControlSet\Services\Browser",
         "IIS Admin Service": r"HKLM:\SYSTEM\CurrentControlSet\Services\IISADMIN",
     }
 
-    script = generate_service_script(services, "L1", "CIS L1 - Services Baseline")
+    script = generate_detect_script(services, "CIS L1 - Services Baseline")
+    assert "$Services = @{" in script
+    assert "'Computer Browser'" in script
+    assert "'IIS Admin Service'" in script
+    assert "exit 0" in script
+    assert "exit 1" in script
+    assert "$NonCompliant" in script
+
+
+def test_generate_remediate_script():
+    """Remediation script should disable services via Set-ItemProperty."""
+    from split_cis_services import generate_remediate_script
+
+    services = {
+        "Computer Browser": r"HKLM:\SYSTEM\CurrentControlSet\Services\Browser",
+        "IIS Admin Service": r"HKLM:\SYSTEM\CurrentControlSet\Services\IISADMIN",
+    }
+
+    script = generate_remediate_script(services, "CIS L1 - Services Baseline")
     assert "$Services = @{" in script
     assert "'Computer Browser'" in script
     assert "'IIS Admin Service'" in script
     assert "#Requires -RunAsAdministrator" in script
+    assert "Set-ItemProperty" in script
+    assert "'Start'" in script
+    assert "-Value 4" in script
 
 
 def test_end_to_end(tmp_path):
@@ -93,42 +114,64 @@ def test_end_to_end(tmp_path):
 
     main(source_dir=source_dir, config_path=config_path, output_dir=str(tmp_path))
 
-    # Should have baseline scripts
-    assert (tmp_path / "baseline" / "CIS L1 - Services.ps1").exists()
-    assert (tmp_path / "baseline" / "CIS L2 - Services.ps1").exists()
+    # Should have baseline detect/remediate pairs
+    assert (tmp_path / "baseline" / "CIS L1 - Services - Detect.ps1").exists()
+    assert (tmp_path / "baseline" / "CIS L1 - Services - Remediate.ps1").exists()
+    assert (tmp_path / "baseline" / "CIS L2 - Services - Detect.ps1").exists()
+    assert (tmp_path / "baseline" / "CIS L2 - Services - Remediate.ps1").exists()
 
-    # L1 baseline should NOT contain sshd or RemoteAccess (exceptionable)
-    l1_text = (tmp_path / "baseline" / "CIS L1 - Services.ps1").read_text()
-    assert "sshd" not in l1_text
-    assert "RemoteAccess" not in l1_text
-    # But should contain other services
-    assert "Browser" in l1_text
+    # L1 baseline detect should NOT contain sshd or RemoteAccess (exceptionable)
+    l1_detect = (tmp_path / "baseline" / "CIS L1 - Services - Detect.ps1").read_text()
+    assert "sshd" not in l1_detect
+    assert "RemoteAccess" not in l1_detect
+    assert "Browser" in l1_detect
+    assert "exit 0" in l1_detect
+    assert "exit 1" in l1_detect
+
+    # L1 baseline remediate should have Set-ItemProperty
+    l1_remediate = (tmp_path / "baseline" / "CIS L1 - Services - Remediate.ps1").read_text()
+    assert "Set-ItemProperty" in l1_remediate
+    assert "Browser" in l1_remediate
 
     # L2 baseline should NOT contain rejects or exceptionables
-    l2_text = (tmp_path / "baseline" / "CIS L2 - Services.ps1").read_text()
-    assert "BTAGService" not in l2_text  # reject
-    assert "bthserv" not in l2_text      # reject
-    assert "lfsvc" not in l2_text        # reject
-    assert "MSiSCSI" not in l2_text      # exceptionable
-    assert "SessionEnv" not in l2_text   # exceptionable
-    assert "TermService" not in l2_text  # exceptionable
-    # But should contain accepted services
-    assert "MapsBroker" in l2_text
+    l2_detect = (tmp_path / "baseline" / "CIS L2 - Services - Detect.ps1").read_text()
+    assert "BTAGService" not in l2_detect  # reject
+    assert "bthserv" not in l2_detect      # reject
+    assert "lfsvc" not in l2_detect        # reject
+    assert "MSiSCSI" not in l2_detect      # exceptionable
+    assert "SessionEnv" not in l2_detect   # exceptionable
+    assert "TermService" not in l2_detect  # exceptionable
+    assert "MapsBroker" in l2_detect
 
-    # Should have exceptionable scripts
-    assert (tmp_path / "exceptionable" / "CIS 81.14 - OpenSSH SSH Server.ps1").exists()
-    assert (tmp_path / "exceptionable" / "CIS 81.23 - Routing and Remote Access.ps1").exists()
-    assert (tmp_path / "exceptionable" / "CIS 81.13 - Microsoft iSCSI Initiator Service.ps1").exists()
-    assert (tmp_path / "exceptionable" / "CIS 81.17 - Remote Desktop Configuration.ps1").exists()
-    assert (tmp_path / "exceptionable" / "CIS 81.18 - Remote Desktop Services.ps1").exists()
+    # Should have exceptionable detect/remediate pairs
+    assert (tmp_path / "exceptionable" / "CIS 81.14 - OpenSSH SSH Server - Detect.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.14 - OpenSSH SSH Server - Remediate.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.23 - Routing and Remote Access - Detect.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.23 - Routing and Remote Access - Remediate.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.13 - Microsoft iSCSI Initiator Service - Detect.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.13 - Microsoft iSCSI Initiator Service - Remediate.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.17 - Remote Desktop Configuration - Detect.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.17 - Remote Desktop Configuration - Remediate.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.18 - Remote Desktop Services - Detect.ps1").exists()
+    assert (tmp_path / "exceptionable" / "CIS 81.18 - Remote Desktop Services - Remediate.ps1").exists()
 
-    # Exceptionable script should disable just that one service
-    sshd_text = (tmp_path / "exceptionable" / "CIS 81.14 - OpenSSH SSH Server.ps1").read_text()
-    assert "sshd" in sshd_text
-    assert "Browser" not in sshd_text  # should only have sshd
+    # Exceptionable detect should check just that one service
+    sshd_detect = (tmp_path / "exceptionable" / "CIS 81.14 - OpenSSH SSH Server - Detect.ps1").read_text()
+    assert "sshd" in sshd_detect
+    assert "Browser" not in sshd_detect
 
-    # manifest.json should exist
+    # manifest.json should exist with new format
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     types = {e["type"] for e in manifest}
-    assert "baseline" in types
-    assert "exceptionable" in types
+    assert "service-baseline" in types
+    assert "service-exceptionable" in types
+
+    # Manifest entries should use detectScript/remediateScript keys
+    for entry in manifest:
+        assert "detectScript" in entry
+        assert "remediateScript" in entry
+        assert "file" not in entry
+
+    # assignTo should use config value, not "AllDevices"
+    for entry in manifest:
+        assert entry["assignTo"] == "001i-test-security-baseline"
