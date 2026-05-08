@@ -101,6 +101,16 @@ def _process_children(children: list[dict], lookup: dict) -> dict:
                 "alternatives": child_ctrl["alternatives"],
             })
             modified = True
+        elif disposition == "modified":
+            # Apply the modifiedValue to this child's value, then keep it.
+            base = child_copy if nested_modified else copy.deepcopy(child)
+            if child_ctrl["modified_value"]:
+                if "choiceSettingValue" in base and isinstance(base["choiceSettingValue"], dict):
+                    base["choiceSettingValue"]["value"] = child_ctrl["modified_value"]
+                elif "simpleSettingValue" in base and isinstance(base["simpleSettingValue"], dict):
+                    base["simpleSettingValue"]["value"] = child_ctrl["modified_value"]
+            filtered.append(base)
+            modified = True
         else:
             # accept or not in config — keep
             if nested_modified:
@@ -364,6 +374,7 @@ def process_file(
     lookup: dict,
     output_dir: str,
     assignment_group: str | None = None,
+    autopilot_assignment_group: str | None = None,
     dry_run: bool = False,
 ) -> list[dict]:
     """Process a single CIS Build Kit JSON file.
@@ -522,7 +533,7 @@ def main(
     all_manifest = []
 
     for jf in json_files:
-        entries = process_file(str(jf), config, lookup, output_dir, assignment_group, dry_run)
+        entries = process_file(str(jf), config, lookup, output_dir, assignment_group, autopilot_assignment_group, dry_run)
         all_manifest.extend(entries)
 
     # Write manifest

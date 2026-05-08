@@ -6,9 +6,9 @@ Reconciled from committee review, deployment plan, and follow-up research.
 
 ---
 
-## Exceptionable — 19 controls (scope tag 001)
+## Exceptionable — 20 controls (scope tag 001)
 
-### Settings Catalog (13)
+### Settings Catalog (14)
 
 ```
 CIS #            Setting                         Baseline              Alternatives
@@ -20,6 +20,7 @@ CIS #            Setting                         Baseline              Alternati
 4.10.9.1.3       IEEE 1394 device setup           Blocked               Allowed (COSU)
 4.10.9.2         Device Metadata Retrieval        Blocked               Allowed
 4.10.26.2        Network selection UI             Hidden                Visible (COSU)
+4.11.7.3.1       Deny Write to Unencrypted USB    Required              Allowed (write to unencrypted)
 4.11.36.4.2.1    Allow RDP Connections            Disabled              Enabled
 68.2             Input Personalization            Block                 Allow
 89.10            Create Symbolic Links            Admins                Admins + Hyper-V
@@ -40,7 +41,7 @@ CIS #   Service                          Baseline = Disable    Exception = exclu
 
 ---
 
-## Reject — strip from policies (15 + entire Windows Update JSON)
+## Reject — strip from policies (12 + entire Windows Update JSON)
 
 ```
 CIS #            Setting                                  Reason
@@ -51,22 +52,24 @@ CIS #            Setting                                  Reason
 12.1             Allow Camera = Not allowed               Blocks Teams/Zoom video
 81.1             Bluetooth Audio Gateway (BTAGService)    Breaks wireless peripherals; no Intune Bluetooth version controls
 81.2             Bluetooth Support (bthserv)              Breaks wireless peripherals; no Intune Bluetooth version controls
-4.11.7.2.9       Require additional auth at startup       TPM startup PIN breaks Autopilot/silent BitLocker
-4.11.7.2.12      Configure TPM startup PIN                TPM startup PIN breaks Autopilot/silent BitLocker
-4.11.7.2.13      Configure TPM startup                    TPM startup PIN breaks Autopilot/silent BitLocker
 103.1-103.6      Entire Windows Update JSON               WUfB managed via Update Rings, not Settings Catalog
 ```
 
 ---
 
-## Modified Value — deploy with non-CIS value (1)
+## Modified Value — deploy with non-CIS value (4)
 
 ```
-CIS #   Setting                               CIS Value                        Our Value
-49.29   UAC standard user elevation prompt     Automatically deny requests      Prompt for credentials on Secure Desktop
+CIS #         Setting                                CIS Value                        Our Value
+49.29         UAC standard user elevation prompt     Automatically deny requests      Prompt for credentials on Secure Desktop
+4.11.7.2.9    Require additional auth at startup     Enabled (paired w/ require-PIN)  Enabled (TPM-only required; PIN/key/PIN+key forbidden)
+4.11.7.2.12   Configure TPM startup PIN              Require startup PIN with TPM     Do not allow startup PIN with TPM
+4.11.7.2.13   Configure TPM startup                  Do not allow TPM                 Require TPM
 ```
 
-Non-exceptionable, scope tag 001-readonly. Using LAPS account for elevation.
+49.29: non-exceptionable, scope tag 001. Using LAPS account for elevation.
+
+4.11.7.2.9 / .12 / .13: previously rejected wholesale because CIS pairs the parent toggle with require-PIN, which breaks Autopilot/silent BitLocker. Reframed: keep the parent enabled (so devices can't downgrade to no startup auth), but require TPM-only and forbid PIN/key/PIN+key/non-TPM. The three currently-untracked siblings (TPM+key, TPM+PIN+key, non-TPM) accept upstream CIS `_0` (Do not allow) by default and so are not separately listed in cis-control-config.json.
 
 ---
 
