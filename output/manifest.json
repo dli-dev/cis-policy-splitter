@@ -1,0 +1,237 @@
+[
+  {
+    "file": "baseline/CIS BL - BitLocker.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.10.9.1.3 - Prevent Installation of Matching Device Setup Classes (IEEE 1394) - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.10.9.1.3 - Prevent Installation of Matching Device Setup Classes (IEEE 1394) - Alt (allowed).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "exceptionable/CIS 4.11.7.3.1 - Deny Write Access to Removable Drives Not Protected by BitLocker - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.11.7.3.1 - Deny Write Access to Removable Drives Not Protected by BitLocker - Alt (allowed).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "baseline/CIS L1 - Admin Templates - System (4.10).json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.10.9.2 - Prevent Device Metadata Retrieval from Network - Alt (allowed).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "exceptionable/CIS 4.10.26.2 - Do Not Display Network Selection UI at Logon - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.10.26.2 - Do Not Display Network Selection UI at Logon - Alt (visible).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "baseline/CIS L1 - Admin Templates - Windows Components (4.11).json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L1 - Auditing.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L1 - Autopilot.json",
+    "type": "autopilot",
+    "assignTo": "001i-test-security-baseline-user"
+  },
+  {
+    "file": "baseline/CIS L1 - Defender.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L1 - Device Lock & WHFB.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 26.6 - Max Device Password Failed Attempts (child of Device Lock) - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 26.6 - Max Device Password Failed Attempts (child of Device Lock) - Alt (cis-default-5).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "baseline/CIS L1 - Firewall.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L1 - Local Policies Security Options.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 49.1 - Guest Account Status - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 49.1 - Guest Account Status - Alt (enabled).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "exceptionable/CIS 49.4 - Rename Guest Account - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 49.4 - Rename Guest Account - Alt (not-renamed).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "baseline/CIS L1 - Section 1 - 4.9.1.1.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.4.2 - Configure SMBv1 Client Driver - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.4.2 - Configure SMBv1 Client Driver - Alt (enabled).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "exceptionable/CIS 4.6.9.1 - Prohibit Installation and Configuration of Network Bridge - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.6.9.1 - Prohibit Installation and Configuration of Network Bridge - Alt (allowed).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "baseline/CIS L1 - Section 15 - 104.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 68.2 - Allow Input Personalization - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 68.2 - Allow Input Personalization - Alt (allow).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "baseline/CIS L1 - User Rights.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 89.10 - Create Symbolic Links - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 89.10 - Create Symbolic Links - Alt (admins-hyperv).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "exceptionable/CIS 89.12 - Debug Programs - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 89.12 - Debug Programs - Alt (admins-debuggers).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "exceptionable/CIS 89.14 - Deny Local Log On - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L2 - Admin Templates - System (4.10).json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L2 - Admin Templates - Windows Components (4.11).json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.11.36.4.2.1 - Allow Users to Connect Remotely (RDP) - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS 4.11.36.4.2.1 - Allow Users to Connect Remotely (RDP) - Alt (enabled).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "baseline/CIS L2 - Defender.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L2 - Section 1 - 4.9.1.1.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "baseline/CIS L2 - Section 12 - 98.json",
+    "type": "baseline",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS Inactivity Lock - Baseline.json",
+    "type": "exceptionable",
+    "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "exceptionable/CIS Inactivity Lock - Alt (30min).json",
+    "type": "alternative",
+    "assignTo": null
+  },
+  {
+    "file": "exceptionable/CIS Inactivity Lock - Alt (disabled).json",
+    "type": "alternative",
+    "assignTo": null
+  }
+]

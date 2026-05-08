@@ -1,0 +1,28 @@
+{
+  "name": "CIS 4.10.26.2 - Do Not Display Network Selection UI at Logon - Baseline",
+  "description": "CIS 4.10.26.2 exceptionable baseline: Do Not Display Network Selection UI at Logon",
+  "platforms": "windows10",
+  "technologies": "mdm",
+  "roleScopeTagIds": [
+    "001"
+  ],
+  "templateReference": {
+    "templateId": "",
+    "templateFamily": "none"
+  },
+  "settings": [
+    {
+      "id": "10",
+      "settingInstance": {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+        "settingDefinitionId": "device_vendor_msft_policy_config_windowslogon_dontdisplaynetworkselectionui",
+        "settingInstanceTemplateReference": null,
+        "choiceSettingValue": {
+          "settingValueTemplateReference": null,
+          "value": "device_vendor_msft_policy_config_windowslogon_dontdisplaynetworkselectionui_1",
+          "children": []
+        }
+      }
+    }
+  ]
+}

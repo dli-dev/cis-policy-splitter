@@ -1,0 +1,28 @@
+{
+  "name": "CIS 49.1 - Guest Account Status - Baseline",
+  "description": "CIS 49.1 exceptionable baseline: Guest Account Status",
+  "platforms": "windows10",
+  "technologies": "mdm",
+  "roleScopeTagIds": [
+    "001"
+  ],
+  "templateReference": {
+    "templateId": "",
+    "templateFamily": "none"
+  },
+  "settings": [
+    {
+      "id": "0",
+      "settingInstance": {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+        "settingDefinitionId": "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_enableguestaccountstatus",
+        "settingInstanceTemplateReference": null,
+        "choiceSettingValue": {
+          "settingValueTemplateReference": null,
+          "value": "device_vendor_msft_policy_config_localpoliciessecurityoptions_accounts_enableguestaccountstatus_0",
+          "children": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "CIS 68.2 - Allow Input Personalization - Baseline",
+  "description": "CIS 68.2 exceptionable baseline: Allow Input Personalization",
+  "platforms": "windows10",
+  "technologies": "mdm",
+  "roleScopeTagIds": [
+    "001"
+  ],
+  "templateReference": {
+    "templateId": "",
+    "templateFamily": "none"
+  },
+  "settings": [
+    {
+      "id": "18",
+      "settingInstance": {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+        "settingDefinitionId": "device_vendor_msft_policy_config_privacy_allowinputpersonalization",
+        "settingInstanceTemplateReference": null,
+        "choiceSettingValue": {
+          "settingValueTemplateReference": null,
+          "value": "device_vendor_msft_policy_config_privacy_allowinputpersonalization_0",
+          "children": []
+        }
+      }
+    }
+  ]
+}

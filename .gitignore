@@ -2,7 +2,7 @@
 __pycache__/
 *.pyc
 .venv/
-output/
 .pytest_cache/
+output/deployment-log*.json
 deployment-log.json
 cis-policies-prod.csv

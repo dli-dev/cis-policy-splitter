@@ -1,0 +1,30 @@
+{
+  "name": "CIS 89.12 - Debug Programs - Alt (admins-debuggers)",
+  "description": "CIS 89.12 alternative (admins-debuggers): Administrators + Debugger Users (SID must be set per-org)",
+  "platforms": "windows10",
+  "technologies": "mdm",
+  "roleScopeTagIds": [
+    "001"
+  ],
+  "templateReference": {
+    "templateId": "",
+    "templateFamily": "none"
+  },
+  "settings": [
+    {
+      "id": "11",
+      "settingInstance": {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationSimpleSettingCollectionInstance",
+        "settingDefinitionId": "device_vendor_msft_policy_config_userrights_debugprograms",
+        "settingInstanceTemplateReference": null,
+        "simpleSettingCollectionValue": [
+          {
+            "@odata.type": "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
+            "settingValueTemplateReference": null,
+            "value": "*S-1-5-32-544"
+          }
+        ]
+      }
+    }
+  ]
+}

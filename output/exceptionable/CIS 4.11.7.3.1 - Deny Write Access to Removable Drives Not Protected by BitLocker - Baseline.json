@@ -1,0 +1,39 @@
+{
+  "name": "CIS 4.11.7.3.1 - Deny Write Access to Removable Drives Not Protected by BitLocker - Baseline",
+  "description": "CIS 4.11.7.3.1 exceptionable baseline: Deny Write Access to Removable Drives Not Protected by BitLocker",
+  "platforms": "windows10",
+  "technologies": "mdm",
+  "roleScopeTagIds": [
+    "001"
+  ],
+  "templateReference": {
+    "templateId": "",
+    "templateFamily": "none"
+  },
+  "settings": [
+    {
+      "id": "6",
+      "settingInstance": {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+        "settingDefinitionId": "device_vendor_msft_bitlocker_removabledrivesrequireencryption",
+        "settingInstanceTemplateReference": null,
+        "choiceSettingValue": {
+          "settingValueTemplateReference": null,
+          "value": "device_vendor_msft_bitlocker_removabledrivesrequireencryption_1",
+          "children": [
+            {
+              "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+              "settingDefinitionId": "device_vendor_msft_bitlocker_removabledrivesrequireencryption_rdvcrossorg",
+              "settingInstanceTemplateReference": null,
+              "choiceSettingValue": {
+                "settingValueTemplateReference": null,
+                "value": "device_vendor_msft_bitlocker_removabledrivesrequireencryption_rdvcrossorg_0",
+                "children": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
