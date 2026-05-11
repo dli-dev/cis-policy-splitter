@@ -536,3 +536,30 @@ def test_batch_mode(tmp_path):
     # Standalone 49.8 / 26.7 outputs should NOT exist (they were bundled)
     assert not any("49.8" in n for n in names)
     assert not any("26.7" in n for n in names)
+
+
+def test_load_config_exposes_uoft_local_policies(tmp_path):
+    """load_config should surface a uoftLocalPolicies list when present."""
+    from split_cis_policies import load_config
+
+    minimal_config = {
+        "scopeTags": {"readonly": "001", "exceptionable": "001"},
+        "controls": {},
+        "uoftLocalPolicies": [
+            {
+                "file": "uoft-policies/example.json",
+                "assignTo": "001i-test-security-baseline",
+                "rationale": "Example UofT-local policy.",
+            }
+        ],
+    }
+    config_path = tmp_path / "cis-control-config.json"
+    config_path.write_text(json.dumps(minimal_config), encoding="utf-8")
+
+    config, lookup, bundle_lookup = load_config(str(config_path))
+
+    assert "uoftLocalPolicies" in config
+    assert len(config["uoftLocalPolicies"]) == 1
+    entry = config["uoftLocalPolicies"][0]
+    assert entry["file"] == "uoft-policies/example.json"
+    assert entry["assignTo"] == "001i-test-security-baseline"
