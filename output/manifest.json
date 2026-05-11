@@ -233,5 +233,10 @@
     "file": "exceptionable/CIS Inactivity Lock - Alt (disabled).json",
     "type": "alternative",
     "assignTo": null
+  },
+  {
+    "file": "../uoft-policies/001 UOFT Defender Tuning.json",
+    "type": "uoft",
+    "assignTo": "001i-test-security-baseline"
   }
 ]

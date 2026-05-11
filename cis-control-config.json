@@ -437,6 +437,13 @@
       ]
     }
   },
+  "uoftLocalPolicies": [
+    {
+      "file": "uoft-policies/001 UOFT Defender Tuning.json",
+      "assignTo": "001i-test-security-baseline",
+      "rationale": "Post-baseline Defender tuning (archive scanning, cloud protection, etc.); not a CIS control. Hand-built; survives splitter re-runs via this registration."
+    }
+  ],
   "serviceControls": {
     "_comment": "System Service Scripts — keyed by registry service name",
 
