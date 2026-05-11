@@ -1,0 +1,28 @@
+{
+  "description": "UofT-local: automatic rotation of BitLocker recovery passwords after use (AAD + Hybrid AAD). Not a CIS v4.0.0 control.",
+  "name": "CIS BitLocker - Recovery Password Rotation",
+  "platforms": "windows10",
+  "roleScopeTagIds": [
+    "001"
+  ],
+  "technologies": "mdm",
+  "templateReference": {
+    "templateId": "",
+    "templateFamily": "none"
+  },
+  "settings": [
+    {
+      "settingInstance": {
+        "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+        "settingInstanceTemplateReference": null,
+        "auditRuleInformation": null,
+        "settingDefinitionId": "device_vendor_msft_bitlocker_configurerecoverypasswordrotation",
+        "choiceSettingValue": {
+          "value": "device_vendor_msft_bitlocker_configurerecoverypasswordrotation_2",
+          "children": [],
+          "settingValueTemplateReference": null
+        }
+      }
+    }
+  ]
+}
