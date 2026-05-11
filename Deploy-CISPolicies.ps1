@@ -292,11 +292,19 @@ function New-IntunePolicy {
             $assignResp = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assignments"
             $currentAssignments = @($assignResp.value)
         } catch {
-            Write-Warning "Failed to fetch existing assignments for '$policyName': $($_.Exception.Message). Skipping assignment reconcile."
+            $msg = "Failed to fetch existing assignments: $($_.Exception.Message)"
+            Write-Warning "$msg for '$policyName'. Skipping assignment reconcile."
+            $result.Error = $msg
             return $result
         }
 
         # Build dedup set keyed by (@odata.type, groupId) from existing portal assignments.
+        # NOTE: the key intentionally omits assignment-filter ID/type. If a department adds
+        # a FILTERED assignment for the same group the manifest declares (filterless), this
+        # treats it as "already present" and the manifest's filterless version will not be
+        # added — the department's filtered targeting wins silently. This matches the
+        # federated model where departments add new groups, not filters on baseline groups.
+        # If that ever changes, fold deviceAndAppManagementAssignmentFilterId into the key.
         $existingKeys = @{}
         foreach ($a in $currentAssignments) {
             $type = $a.target['@odata.type']
