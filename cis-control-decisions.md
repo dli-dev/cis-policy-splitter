@@ -156,3 +156,14 @@ CIS #   Setting                              Condition
 49.6    Do not display last signed-in        Accept now; revisit when implementing Windows Hello
 81.34   WpnService (push notifications)      Accept and deploy; monitor for Intune push notification issues
 ```
+
+---
+
+## UofT-Local Additions (Not CIS Controls)
+
+These settings are not part of the CIS Microsoft Intune for Windows 11 v4.0.0 benchmark. They ride along in `output/manifest.json` as sibling policies because the committee approved them as UofT-local requirements. Registration lives in `cis-control-config.json` under `uoftLocalPolicies`; each entry below maps to a Settings Catalog JSON in `uoft-policies/`.
+
+| Synthetic key | Description | Setting(s) | Committee date | Rationale |
+|---|---|---|---|---|
+| UOFT-DEF-001 | Defender post-baseline tuning | Archive scanning, cloud protection, etc. (multi-leaf, see `uoft-policies/001 UOFT Defender Tuning.json`) | (prior decision; date TBD) | Tune Defender beyond the CIS Defender baseline to match UofT operational defaults. |
+| UOFT-BL-001 | BitLocker recovery-password rotation | `./Device/Vendor/MSFT/BitLocker/ConfigureRecoveryPasswordRotation` = 2 (Refresh on for AAD + Hybrid AAD) | 2026-05-11 | CIS v4.0.0 ships no recovery-password rotation control. Legacy "001 UOFT Bitlocker Recovery Password Rotation Policy" already enforces this in prod; UofT-local addition preserves rotation behavior when the legacy policy is retired. Without rotation, escrowed recovery keys remain valid indefinitely after a single-use disclosure. |
