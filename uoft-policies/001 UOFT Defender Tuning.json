@@ -1,9 +1,9 @@
 {
   "description": "",
-  "name": "001 UOFT Defender Tuning",
+  "name": "CIS Defender - Post-Baseline Tuning",
   "platforms": "windows10",
   "roleScopeTagIds": [
-    "0"
+    "001"
   ],
   "technologies": "mdm",
   "templateReference": {
