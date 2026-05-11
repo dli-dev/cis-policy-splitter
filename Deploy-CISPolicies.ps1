@@ -7,8 +7,10 @@
     is the source of truth for the policy BODY; assignments are merged additively.
 
       * If a policy with the same name does not exist, it is CREATED (POST).
-      * If it does exist, the body is wholesale-replaced via PATCH (preserves the
-        GUID, bumps lastModifiedDateTime on every run).
+      * If it does exist, the body is wholesale-replaced via PUT (preserves the
+        GUID, bumps lastModifiedDateTime on every run). PATCH cannot be used here
+        because the 'settings' collection is modeled as a navigation property
+        and Graph rejects PATCH bodies that include it.
       * Assignments are ADDITIVELY MERGED. Existing portal-side assignments
         (groups added by departments/units to target their own scopes) are
         ALWAYS PRESERVED. The manifest's declared assignTo / excludeGroups are
@@ -233,7 +235,11 @@ function New-IntunePolicy {
 
     if ($existing) {
         try {
-            Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($existing.id)')" -Body $body -ContentType "application/json" | Out-Null
+            # PUT, not PATCH: 'settings' is a navigation property on configurationPolicy and
+            # Graph rejects PATCH bodies containing it ("Cannot apply PATCH to navigation
+            # property 'settings'"). PUT replaces the full entity in place, settings included,
+            # and preserves the GUID. Tested on QA 2026-05-11.
+            Invoke-MgGraphRequest -Method PUT -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($existing.id)')" -Body $body -ContentType "application/json" | Out-Null
             $result.Id = $existing.id; $result.Updated = $true
             Write-Host "  UPDATED: $policyName (ID: $($existing.id))" -ForegroundColor Cyan
         } catch {
