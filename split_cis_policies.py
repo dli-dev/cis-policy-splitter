@@ -669,6 +669,58 @@ def emit_bundles(
     return manifest_entries
 
 
+def emit_uoft_local_policies(
+    uoft_policies: list[dict],
+    output_dir: str,
+    config_dir: str,
+) -> list[dict]:
+    """Emit manifest entries for hand-built UofT-local Settings Catalog policies.
+
+    Each entry's ``file`` in the config is resolved relative to ``config_dir``
+    (the directory containing cis-control-config.json). The manifest stores
+    the path relative to the manifest's own directory so the deployer and
+    exporter can resolve it without knowing the config location.
+    """
+    manifest_entries: list[dict] = []
+    if not uoft_policies:
+        return manifest_entries
+
+    manifest_dir = Path(output_dir).resolve()
+    seen_files: set[str] = set()
+
+    for entry in uoft_policies:
+        rel_file = entry.get("file")
+        if not rel_file:
+            raise ValueError(f"uoftLocalPolicies entry missing 'file': {entry}")
+
+        abs_path = (Path(config_dir) / rel_file).resolve()
+        if not abs_path.exists():
+            raise FileNotFoundError(
+                f"uoftLocalPolicies file does not exist: {abs_path} "
+                f"(declared as {rel_file!r} relative to {config_dir})"
+            )
+
+        try:
+            manifest_rel = abs_path.relative_to(manifest_dir).as_posix()
+        except ValueError:
+            import os
+            manifest_rel = os.path.relpath(abs_path, manifest_dir).replace(os.sep, "/")
+
+        if manifest_rel in seen_files:
+            raise ValueError(f"Duplicate uoftLocalPolicies file entry: {manifest_rel}")
+        seen_files.add(manifest_rel)
+
+        manifest_entries.append(
+            {
+                "file": manifest_rel,
+                "type": "uoft",
+                "assignTo": entry.get("assignTo"),
+            }
+        )
+
+    return manifest_entries
+
+
 def main(
     path: str,
     config_path: str,
@@ -687,7 +739,9 @@ def main(
 
     if not json_files:
         print(f"No JSON files found at: {path}")
-        return
+        if not config.get("uoftLocalPolicies"):
+            return
+        print("Continuing because uoftLocalPolicies is configured.")
 
     assignment_group = config.get("assignmentGroup")
     autopilot_assignment_group = config.get("autopilotAssignmentGroup", assignment_group)
@@ -728,6 +782,14 @@ def main(
     )
     all_manifest.extend(bundle_entries)
 
+    # Emit UofT-local hand-built policies (not derived from CIS Build Kit).
+    uoft_entries = emit_uoft_local_policies(
+        config.get("uoftLocalPolicies", []),
+        output_dir,
+        config_dir=str(Path(config_path).resolve().parent),
+    )
+    all_manifest.extend(uoft_entries)
+
     # Write manifest
     if not dry_run:
         manifest_path = Path(output_dir) / "manifest.json"
@@ -740,10 +802,12 @@ def main(
     baselines = sum(1 for e in all_manifest if e["type"] in ("baseline", "autopilot"))
     exceptionables = sum(1 for e in all_manifest if e["type"] == "exceptionable")
     alternatives = sum(1 for e in all_manifest if e["type"] == "alternative")
+    uoft_locals = sum(1 for e in all_manifest if e["type"] == "uoft")
     print(f"\n=== Summary ===")
     print(f"  Baselines:      {baselines}")
     print(f"  Exceptionables: {exceptionables}")
     print(f"  Alternatives:   {alternatives}")
+    print(f"  UofT-local:     {uoft_locals}")
     print(f"  Total policies: {len(all_manifest)}")
 
 

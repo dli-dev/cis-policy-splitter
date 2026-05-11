@@ -563,3 +563,65 @@ def test_load_config_exposes_uoft_local_policies(tmp_path):
     entry = config["uoftLocalPolicies"][0]
     assert entry["file"] == "uoft-policies/example.json"
     assert entry["assignTo"] == "001i-test-security-baseline"
+
+
+def test_main_emits_uoft_local_policies_into_manifest(tmp_path):
+    """main() should append uoftLocalPolicies entries to manifest.json with type='uoft'."""
+    from split_cis_policies import main
+
+    # Create a UofT-local Settings Catalog policy file in tmp.
+    uoft_dir = tmp_path / "uoft-policies"
+    uoft_dir.mkdir()
+    uoft_file = uoft_dir / "example.json"
+    uoft_file.write_text(
+        json.dumps(
+            {
+                "name": "Example UofT-Local",
+                "platforms": "windows10",
+                "technologies": "mdm",
+                "roleScopeTagIds": ["001"],
+                "settings": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Minimal config: no CIS controls, just one uoftLocalPolicies entry.
+    config = {
+        "scopeTags": {"readonly": "001", "exceptionable": "001"},
+        "controls": {},
+        "uoftLocalPolicies": [
+            {
+                "file": "uoft-policies/example.json",
+                "assignTo": "001i-test-security-baseline",
+                "rationale": "Test fixture.",
+            }
+        ],
+    }
+    config_path = tmp_path / "cis-control-config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    # Empty CIS Build Kit input directory.
+    cis_input = tmp_path / "cis-input"
+    cis_input.mkdir()
+
+    output_dir = tmp_path / "output"
+
+    main(
+        path=str(cis_input),
+        config_path=str(config_path),
+        output_dir=str(output_dir),
+        dry_run=False,
+    )
+
+    manifest_path = output_dir / "manifest.json"
+    assert manifest_path.exists(), "manifest.json was not written"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    uoft_entries = [e for e in manifest if e["type"] == "uoft"]
+    assert len(uoft_entries) == 1, f"expected 1 uoft entry, got {len(uoft_entries)}: {manifest}"
+    entry = uoft_entries[0]
+    assert entry["assignTo"] == "001i-test-security-baseline"
+    # File path in manifest is relative to manifest's directory.
+    resolved = (manifest_path.parent / entry["file"]).resolve()
+    assert resolved == uoft_file.resolve()
