@@ -4,21 +4,27 @@
 
 .DESCRIPTION
     Upserts configuration policies in Intune from policy JSON files. The manifest
-    is the source of truth for both policy body and assignments:
+    is the source of truth for the policy BODY; assignments are merged additively.
 
       * If a policy with the same name does not exist, it is CREATED (POST).
       * If it does exist, the body is wholesale-replaced via PATCH (preserves the
         GUID, bumps lastModifiedDateTime on every run).
-      * Assignments are ALWAYS reconciled to the manifest's declared set via the
-        /assign action — including clearing to empty when the manifest declares
-        no targets. Portal-only assignments WILL be removed on the next run.
+      * Assignments are ADDITIVELY MERGED. Existing portal-side assignments
+        (groups added by departments/units to target their own scopes) are
+        ALWAYS PRESERVED. The manifest's declared assignTo / excludeGroups are
+        added only if not already present. Deploy NEVER removes an existing
+        assignment.
 
     Accepts either a manifest file (deploy all) or individual policy JSON paths.
 
-    Caveat: platforms and technologies are immutable on existing policies. If the
-    manifest's platforms/technologies drift from the tenant copy, PATCH fails with
-    400 and the deploy logs the error and moves on — manual delete-and-rename is
-    the recovery path.
+    Caveats:
+      * platforms and technologies are immutable on existing policies. If the
+        manifest's platforms/technologies drift from the tenant copy, PATCH
+        fails with 400 and the deploy logs the error and moves on — manual
+        delete-and-rename is the recovery path.
+      * The manifest cannot REMOVE an assignment. If the manifest's assignTo
+        changes from group A to group B, the policy ends up assigned to BOTH;
+        group A must be removed manually via the portal.
 
     Run split_cis_policies.py first to generate the output directory.
 
@@ -209,9 +215,14 @@ function New-IntunePolicy {
 
     if ($WhatIfPreference) {
         $action = if ($existing) { "Would UPDATE" } else { "Would CREATE" }
-        $assignMsg = if ($AssignTo) { " (include: $AssignTo)" } else { "" }
-        if ($ExcludeGroups.Count -gt 0) { $assignMsg += " (exclude: $($ExcludeGroups -join ', '))" }
-        if (-not $AssignTo -and $ExcludeGroups.Count -eq 0) { $assignMsg = " (assignments: cleared)" }
+        $assignParts = @()
+        if ($AssignTo) { $assignParts += "include: $AssignTo" }
+        if ($ExcludeGroups.Count -gt 0) { $assignParts += "exclude: $($ExcludeGroups -join ', ')" }
+        $assignMsg = if ($assignParts.Count -gt 0) {
+            " (would add if missing: $($assignParts -join '; '))"
+        } else {
+            " (manifest declares no targets; existing preserved)"
+        }
         Write-Host "  [WhatIf] $action`: $policyName$assignMsg" -ForegroundColor DarkYellow
         $result.Id = if ($existing) { $existing.id } else { 'WHATIF-ID' }
         if ($existing) { $result.Updated = $true } else { $result.Created = $true }
@@ -242,13 +253,13 @@ function New-IntunePolicy {
         }
     }
 
-    # Build assignment targets (one include + zero-or-more excludes)
-    $assignmentTargets = @()
+    # Build the manifest's declared assignment targets (one include + zero-or-more excludes).
+    $manifestTargets = @()
 
     if ($AssignTo) {
         $includeGid = Resolve-GroupId -GroupName $AssignTo
         if ($includeGid) {
-            $assignmentTargets += @{
+            $manifestTargets += @{
                 target = @{
                     '@odata.type' = '#microsoft.graph.groupAssignmentTarget'
                     groupId       = $includeGid
@@ -261,7 +272,7 @@ function New-IntunePolicy {
         if (-not $exGroup) { continue }
         $exGid = Resolve-GroupId -GroupName $exGroup
         if ($exGid) {
-            $assignmentTargets += @{
+            $manifestTargets += @{
                 target = @{
                     '@odata.type' = '#microsoft.graph.exclusionGroupAssignmentTarget'
                     groupId       = $exGid
@@ -270,19 +281,57 @@ function New-IntunePolicy {
         }
     }
 
+    # Additive merge: existing portal assignments are NEVER removed by deploy. We GET the
+    # policy's current assignment set, union the manifest's targets (deduped by
+    # @odata.type+groupId), and POST /assign only if the manifest contributes something new.
+    # Federated assignment management: departments add their own include/exclude groups in
+    # the portal and we must preserve those across re-deploys.
     if ($result.Id) {
+        $currentAssignments = @()
         try {
-            $assignBody = @{ assignments = $assignmentTargets }
-            Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assign" -Body ($assignBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
-            $result.Assigned = $true
-            $assignSummary = @()
-            if ($AssignTo) { $assignSummary += "include: $AssignTo" }
-            if ($ExcludeGroups.Count -gt 0) { $assignSummary += "exclude: $($ExcludeGroups -join ', ')" }
-            if ($assignmentTargets.Count -eq 0) { $assignSummary += "cleared" }
-            Write-Host "  ASSIGNED: $policyName -> $($assignSummary -join '; ')" -ForegroundColor Green
+            $assignResp = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assignments"
+            $currentAssignments = @($assignResp.value)
         } catch {
-            Write-Warning "Failed to assign '$policyName': $($_.Exception.Message)"
-            $result.Error = "Assignment failed: $($_.Exception.Message)"
+            Write-Warning "Failed to fetch existing assignments for '$policyName': $($_.Exception.Message). Skipping assignment reconcile."
+            return $result
+        }
+
+        # Build dedup set keyed by (@odata.type, groupId) from existing portal assignments.
+        $existingKeys = @{}
+        foreach ($a in $currentAssignments) {
+            $type = $a.target['@odata.type']
+            $gid  = $a.target['groupId']
+            if ($type -and $gid) { $existingKeys["$type|$gid"] = $true }
+        }
+
+        # Compute what the manifest contributes that isn't already present.
+        $toAdd = @()
+        foreach ($mt in $manifestTargets) {
+            $key = "$($mt.target['@odata.type'])|$($mt.target['groupId'])"
+            if (-not $existingKeys.ContainsKey($key)) { $toAdd += $mt }
+        }
+
+        if ($toAdd.Count -gt 0) {
+            # Merged = existing (target-only, strip id/source) + new manifest targets.
+            $mergedTargets = @()
+            foreach ($a in $currentAssignments) {
+                $mergedTargets += @{ target = $a.target }
+            }
+            foreach ($mt in $toAdd) { $mergedTargets += $mt }
+
+            try {
+                $assignBody = @{ assignments = $mergedTargets }
+                Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assign" -Body ($assignBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
+                $result.Assigned = $true
+                Write-Host "  ASSIGNED: $policyName -> added $($toAdd.Count) target(s); preserved $($currentAssignments.Count) existing" -ForegroundColor Green
+            } catch {
+                Write-Warning "Failed to assign '$policyName': $($_.Exception.Message)"
+                $result.Error = "Assignment failed: $($_.Exception.Message)"
+            }
+        } elseif ($manifestTargets.Count -gt 0) {
+            Write-Host "  ASSIGN: $policyName -> all $($manifestTargets.Count) manifest target(s) already present; $($currentAssignments.Count) existing preserved" -ForegroundColor Gray
+        } elseif ($currentAssignments.Count -gt 0) {
+            Write-Host "  ASSIGN: $policyName -> manifest declares no targets; $($currentAssignments.Count) existing preserved" -ForegroundColor Gray
         }
     }
 
