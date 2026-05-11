@@ -27,6 +27,10 @@
       * The manifest cannot REMOVE an assignment. If the manifest's assignTo
         changes from group A to group B, the policy ends up assigned to BOTH;
         group A must be removed manually via the portal.
+      * The manifest's assignTo is an ARRAY of group display names. An empty
+        array means "manifest declares no include targets"; existing portal
+        assignments are still preserved. A non-empty array adds each listed
+        group as an include target (deduped against existing portal targeting).
 
     Run split_cis_policies.py first to generate the output directory.
 
@@ -67,6 +71,29 @@ $ErrorActionPreference = 'Stop'
 # ---------------------------------------------------------------------------
 # 1. Resolve policy file list
 # ---------------------------------------------------------------------------
+function ConvertTo-GroupArray {
+    # Manifest's assignTo may be: missing, $null, "", a single string, or an array of strings.
+    # Always coerce to a string[] (possibly empty), stripping nulls/blanks/dupes.
+    param($Value)
+    if ($null -eq $Value) { return @() }
+    $items = if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        @($Value)
+    } else {
+        @($Value)
+    }
+    $seen = @{}
+    $out  = @()
+    foreach ($v in $items) {
+        if (-not $v) { continue }
+        $s = [string]$v
+        if (-not $s.Trim()) { continue }
+        if ($seen.ContainsKey($s)) { continue }
+        $seen[$s] = $true
+        $out += $s
+    }
+    return ,$out
+}
+
 if ($PSCmdlet.ParameterSetName -eq 'Files') {
     $deployItems = @()
     foreach ($f in $PolicyFile) {
@@ -74,7 +101,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Files') {
             Write-Error "Policy file not found: $f"
             return
         }
-        $deployItems += @{ File = (Resolve-Path $f).Path; AssignTo = $null }
+        $deployItems += @{ File = (Resolve-Path $f).Path; AssignTo = @() }
     }
     Write-Host "Deploying $($deployItems.Count) policy file(s)" -ForegroundColor Gray
 } else {
@@ -89,10 +116,12 @@ if ($PSCmdlet.ParameterSetName -eq 'Files') {
     $manifestDir = Split-Path $ManifestFile -Parent
     $deployItems = @()
     foreach ($entry in $manifest) {
+        $assignToRaw = if ($entry.PSObject.Properties['assignTo']) { $entry.assignTo } else { $null }
+        $excludeRaw  = if ($entry.PSObject.Properties['excludeGroups']) { $entry.excludeGroups } else { $null }
         $deployItems += @{
             File          = (Join-Path $manifestDir $entry.file)
-            AssignTo      = if ($entry.PSObject.Properties['assignTo']) { $entry.assignTo } else { $null }
-            ExcludeGroups = if ($entry.PSObject.Properties['excludeGroups']) { @($entry.excludeGroups) } else { @() }
+            AssignTo      = ConvertTo-GroupArray $assignToRaw
+            ExcludeGroups = ConvertTo-GroupArray $excludeRaw
         }
     }
     Write-Host "Loaded manifest: $($deployItems.Count) policies" -ForegroundColor Gray
@@ -205,9 +234,10 @@ function Find-ExistingPolicy {
 }
 
 function New-IntunePolicy {
-    param([hashtable]$PolicyBody, [string]$AssignTo, $ExcludeGroups = @())
+    param([hashtable]$PolicyBody, $AssignTo, $ExcludeGroups = @())
 
     # Normalize: PS param binding can collapse empty arrays to $null and breaks .Count later.
+    $AssignTo      = @($AssignTo      | Where-Object { $_ })
     $ExcludeGroups = @($ExcludeGroups | Where-Object { $_ })
 
     $policyName = $PolicyBody.name
@@ -218,7 +248,7 @@ function New-IntunePolicy {
     if ($WhatIfPreference) {
         $action = if ($existing) { "Would UPDATE" } else { "Would CREATE" }
         $assignParts = @()
-        if ($AssignTo) { $assignParts += "include: $AssignTo" }
+        if ($AssignTo.Count -gt 0) { $assignParts += "include: $($AssignTo -join ', ')" }
         if ($ExcludeGroups.Count -gt 0) { $assignParts += "exclude: $($ExcludeGroups -join ', ')" }
         $assignMsg = if ($assignParts.Count -gt 0) {
             " (would add if missing: $($assignParts -join '; '))"
@@ -259,11 +289,12 @@ function New-IntunePolicy {
         }
     }
 
-    # Build the manifest's declared assignment targets (one include + zero-or-more excludes).
+    # Build the manifest's declared assignment targets (zero-or-more includes + zero-or-more excludes).
     $manifestTargets = @()
 
-    if ($AssignTo) {
-        $includeGid = Resolve-GroupId -GroupName $AssignTo
+    foreach ($inGroup in $AssignTo) {
+        if (-not $inGroup) { continue }
+        $includeGid = Resolve-GroupId -GroupName $inGroup
         if ($includeGid) {
             $manifestTargets += @{
                 target = @{
@@ -378,7 +409,7 @@ Initialize-ExistingPolicyCache
 # ---------------------------------------------------------------------------
 # 6. Confirmation
 # ---------------------------------------------------------------------------
-$assignGroups = @($deployItems | Where-Object { $_.AssignTo } | ForEach-Object { $_.AssignTo } | Select-Object -Unique)
+$assignGroups = @($deployItems | ForEach-Object { $_.AssignTo } | Where-Object { $_ } | Select-Object -Unique)
 Write-Host "`n=== Deployment Plan ===" -ForegroundColor White
 Write-Host "  Tenant:   $Tenant ($tenantDomain)" -ForegroundColor White
 Write-Host "  Policies: $($deployItems.Count)" -ForegroundColor White
@@ -419,7 +450,7 @@ foreach ($item in $deployItems) {
 
     [void]$deploymentLog.Add([ordered]@{
         name = $result.Name; id = $result.Id; file = $item.File
-        assignTo = $item.AssignTo; excludeGroups = @($item.ExcludeGroups); created = $result.Created
+        assignTo = @($item.AssignTo); excludeGroups = @($item.ExcludeGroups); created = $result.Created
         updated = $result.Updated; assigned = $result.Assigned; error = $result.Error
     })
 

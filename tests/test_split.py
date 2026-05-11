@@ -518,10 +518,11 @@ def test_batch_mode(tmp_path):
     names = [e["file"] for e in manifest]
     assert not any("Windows Update" in n for n in names)
 
-    # Autopilot should be tagged with the configured autopilot assignment group
+    # Autopilot should be tagged with the configured autopilot assignment group(s).
+    # assignTo is always a list in the manifest.
     autopilot = [e for e in manifest if "Autopilot" in e["file"]]
     assert len(autopilot) == 1
-    assert autopilot[0]["assignTo"] == "001i-test-security-baseline-user"
+    assert autopilot[0]["assignTo"] == ["001i-test-security-baseline-user"]
     assert autopilot[0]["type"] == "autopilot"
 
     # Inactivity-lock bundle should produce 3 paired policies (Baseline + 2 alts)
@@ -529,9 +530,12 @@ def test_batch_mode(tmp_path):
     assert len(inactivity) == 3
     inactivity_baseline = [e for e in inactivity if e["type"] == "exceptionable"]
     assert len(inactivity_baseline) == 1
-    assert inactivity_baseline[0]["assignTo"] == "001i-test-security-baseline"
+    assert inactivity_baseline[0]["assignTo"] == ["001i-test-security-baseline"]
     inactivity_alts = [e for e in inactivity if e["type"] == "alternative"]
     assert len(inactivity_alts) == 2
+    # Alternatives in the manifest carry an empty assignTo list (no default assignment).
+    for alt in inactivity_alts:
+        assert alt["assignTo"] == []
 
     # Standalone 49.8 / 26.7 outputs should NOT exist (they were bundled)
     assert not any("49.8" in n for n in names)
@@ -621,7 +625,126 @@ def test_main_emits_uoft_local_policies_into_manifest(tmp_path):
     uoft_entries = [e for e in manifest if e["type"] == "uoft"]
     assert len(uoft_entries) == 1, f"expected 1 uoft entry, got {len(uoft_entries)}: {manifest}"
     entry = uoft_entries[0]
-    assert entry["assignTo"] == "001i-test-security-baseline"
+    # assignTo is normalized to a list, even when the config supplies a single string.
+    assert entry["assignTo"] == ["001i-test-security-baseline"]
     # File path in manifest is relative to manifest's directory.
     resolved = (manifest_path.parent / entry["file"]).resolve()
     assert resolved == uoft_file.resolve()
+
+
+def test_uoft_local_policies_assignto_accepts_array(tmp_path):
+    """uoftLocalPolicies.assignTo may be a list of group names — emitted as-is into manifest."""
+    from split_cis_policies import main
+
+    uoft_dir = tmp_path / "uoft-policies"
+    uoft_dir.mkdir()
+    uoft_file = uoft_dir / "example.json"
+    uoft_file.write_text(
+        json.dumps(
+            {
+                "name": "Example UofT-Local",
+                "platforms": "windows10",
+                "technologies": "mdm",
+                "roleScopeTagIds": ["001"],
+                "settings": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = {
+        "scopeTags": {"readonly": "001", "exceptionable": "001"},
+        "controls": {},
+        "uoftLocalPolicies": [
+            {
+                "file": "uoft-policies/example.json",
+                "assignTo": ["001i-group-a", "001i-group-b"],
+                "rationale": "Test fixture for multi-group assignment.",
+            }
+        ],
+    }
+    config_path = tmp_path / "cis-control-config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    cis_input = tmp_path / "cis-input"
+    cis_input.mkdir()
+    output_dir = tmp_path / "output"
+
+    main(
+        path=str(cis_input),
+        config_path=str(config_path),
+        output_dir=str(output_dir),
+        dry_run=False,
+    )
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    uoft_entries = [e for e in manifest if e["type"] == "uoft"]
+    assert len(uoft_entries) == 1
+    assert uoft_entries[0]["assignTo"] == ["001i-group-a", "001i-group-b"]
+
+
+def test_assignment_group_accepts_array(tmp_path):
+    """Top-level assignmentGroup may be an array — baseline manifest entries inherit the full list."""
+    from split_cis_policies import main
+
+    cis_input = tmp_path / "cis-input"
+    cis_input.mkdir()
+    # Minimal Settings Catalog policy file with one accept setting.
+    (cis_input / "CIS (L1) Demo - Windows 11 Intune 4.0.0.json").write_text(
+        json.dumps(
+            {
+                "name": "CIS (L1) Demo - Windows 11 Intune 4.0.0",
+                "description": "",
+                "platforms": "windows10",
+                "technologies": "mdm",
+                "roleScopeTagIds": ["001"],
+                "templateReference": {
+                    "templateId": "00000000-0000-0000-0000-000000000000",
+                    "templateFamily": "none",
+                },
+                "settings": [
+                    {
+                        "id": "0",
+                        "settingInstance": {
+                            "@odata.type": "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
+                            "settingDefinitionId": "demo_setting_id_not_in_lookup",
+                            "choiceSettingValue": {"value": "demo_setting_id_not_in_lookup_1", "children": []},
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = {
+        "scopeTags": {"readonly": "001", "exceptionable": "001"},
+        "assignmentGroup": ["001i-baseline-a", "001i-baseline-b"],
+        "controls": {},
+    }
+    config_path = tmp_path / "cis-control-config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    output_dir = tmp_path / "output"
+    main(
+        path=str(cis_input),
+        config_path=str(config_path),
+        output_dir=str(output_dir),
+        dry_run=False,
+    )
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    baselines = [e for e in manifest if e["type"] == "baseline"]
+    assert len(baselines) == 1
+    assert baselines[0]["assignTo"] == ["001i-baseline-a", "001i-baseline-b"]
+
+
+def test_normalize_groups_helper():
+    """_normalize_groups should coerce None/str/list into a deduped list."""
+    from split_cis_policies import _normalize_groups
+
+    assert _normalize_groups(None) == []
+    assert _normalize_groups("") == []
+    assert _normalize_groups("g1") == ["g1"]
+    assert _normalize_groups(["g1", "g2"]) == ["g1", "g2"]
+    assert _normalize_groups(["g1", "g1", "", None, "g2"]) == ["g1", "g2"]

@@ -353,6 +353,32 @@ def build_output_policy(
     }
 
 
+def _normalize_groups(value) -> list[str]:
+    """Coerce an assignment-group config value into a list of group names.
+
+    Accepts None, "", a single group name, or a list of names (with possible
+    duplicates / empty entries). Returns a deduplicated list preserving order.
+    """
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        seen: set[str] = set()
+        out: list[str] = []
+        for v in value:
+            if not v or not isinstance(v, str):
+                continue
+            if v in seen:
+                continue
+            seen.add(v)
+            out.append(v)
+        return out
+    raise TypeError(
+        f"Assignment group must be a string, list of strings, or null; got {type(value).__name__}"
+    )
+
+
 def _sanitize_filename(name: str) -> str:
     """Remove characters illegal in file paths."""
     name = re.sub(r'[<>:"/\\|?*]', '', name)
@@ -387,8 +413,8 @@ def process_file(
     config: dict,
     lookup: dict,
     output_dir: str,
-    assignment_group: str | None = None,
-    autopilot_assignment_group: str | None = None,
+    assignment_group: list[str] | str | None = None,
+    autopilot_assignment_group: list[str] | str | None = None,
     dry_run: bool = False,
     bundle_lookup: dict | None = None,
     bundled_extracts: dict | None = None,
@@ -406,6 +432,8 @@ def process_file(
         bundle_lookup = {}
     if bundled_extracts is None:
         bundled_extracts = {}
+    assignment_groups = _normalize_groups(assignment_group)
+    autopilot_assignment_groups = _normalize_groups(autopilot_assignment_group)
     with open(filepath, encoding="utf-8-sig") as f:
         policy = json.load(f)
 
@@ -450,7 +478,7 @@ def process_file(
         manifest_entries.append({
             "file": rel_path,
             "type": policy_type,
-            "assignTo": autopilot_assignment_group if is_autopilot else assignment_group,
+            "assignTo": autopilot_assignment_groups if is_autopilot else assignment_groups,
         })
 
     # --- Write exceptionable + alternatives ---
@@ -519,7 +547,7 @@ def process_file(
         manifest_entries.append({
             "file": rel_path,
             "type": "exceptionable",
-            "assignTo": assignment_group,
+            "assignTo": assignment_groups,
         })
 
         for alt in ext.get("alternatives", []):
@@ -549,7 +577,7 @@ def process_file(
             manifest_entries.append({
                 "file": rel_path,
                 "type": "alternative",
-                "assignTo": None,
+                "assignTo": [],
             })
 
     return manifest_entries
@@ -561,7 +589,7 @@ def emit_bundles(
     config: dict,
     lookup: dict,
     output_dir: str,
-    assignment_group: str | None,
+    assignment_group: list[str] | str | None,
     dry_run: bool,
 ) -> list[dict]:
     """Emit one policy per (bundle × tier).
@@ -574,6 +602,7 @@ def emit_bundles(
     manifest_entries = []
     ctrl_by_rec = {ctrl["cis_rec"]: ctrl for ctrl in lookup.values()}
     scope_tag = config["scopeTags"]["exceptionable"]
+    assignment_groups = _normalize_groups(assignment_group)
 
     for bundle_id, bundle in bundles_config.items():
         if bundle_id.startswith("_"):
@@ -663,7 +692,7 @@ def emit_bundles(
             manifest_entries.append({
                 "file": rel_path,
                 "type": entry_type,
-                "assignTo": assignment_group if tier_idx == 0 else None,
+                "assignTo": assignment_groups if tier_idx == 0 else [],
             })
 
     return manifest_entries
@@ -714,7 +743,7 @@ def emit_uoft_local_policies(
             {
                 "file": manifest_rel,
                 "type": "uoft",
-                "assignTo": entry.get("assignTo"),
+                "assignTo": _normalize_groups(entry.get("assignTo")),
             }
         )
 
@@ -743,14 +772,16 @@ def main(
             return
         print("Continuing because uoftLocalPolicies is configured.")
 
-    assignment_group = config.get("assignmentGroup")
-    autopilot_assignment_group = config.get("autopilotAssignmentGroup", assignment_group)
+    assignment_groups = _normalize_groups(config.get("assignmentGroup"))
+    autopilot_assignment_groups = _normalize_groups(
+        config.get("autopilotAssignmentGroup", assignment_groups)
+    )
 
     print(f"Loaded config: {len(lookup)} controls")
-    if assignment_group:
-        print(f"Assignment group: {assignment_group}")
-    if autopilot_assignment_group and autopilot_assignment_group != assignment_group:
-        print(f"Autopilot assignment group: {autopilot_assignment_group}")
+    if assignment_groups:
+        print(f"Assignment group(s): {', '.join(assignment_groups)}")
+    if autopilot_assignment_groups and autopilot_assignment_groups != assignment_groups:
+        print(f"Autopilot assignment group(s): {', '.join(autopilot_assignment_groups)}")
     print(f"Found {len(json_files)} JSON file(s)")
 
     all_manifest = []
@@ -762,8 +793,8 @@ def main(
             config,
             lookup,
             output_dir,
-            assignment_group,
-            autopilot_assignment_group,
+            assignment_groups,
+            autopilot_assignment_groups,
             dry_run,
             bundle_lookup=bundle_lookup,
             bundled_extracts=bundled_extracts,
@@ -777,7 +808,7 @@ def main(
         config,
         lookup,
         output_dir,
-        assignment_group,
+        assignment_groups,
         dry_run,
     )
     all_manifest.extend(bundle_entries)

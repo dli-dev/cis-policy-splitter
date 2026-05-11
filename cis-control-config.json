@@ -445,7 +445,11 @@
     },
     {
       "file": "uoft-policies/001 UOFT BitLocker Recovery Rotation.json",
-      "assignTo": "001i-test-security-baseline",
+      "assignTo": [
+        "001i-test-security-baseline",
+        "9047i-dw-win-tier-1-devices",
+        "9047i-dw-win-tier-2-devices"
+      ],
       "rationale": "Automatic rotation of BitLocker recovery passwords (AAD + Hybrid AAD). CIS v4.0.0 has no equivalent control; UofT-local addition approved by committee 2026-05-11."
     }
   ],
