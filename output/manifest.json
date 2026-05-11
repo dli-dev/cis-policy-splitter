@@ -238,5 +238,10 @@
     "file": "../uoft-policies/001 UOFT Defender Tuning.json",
     "type": "uoft",
     "assignTo": "001i-test-security-baseline"
+  },
+  {
+    "file": "../uoft-policies/001 UOFT BitLocker Recovery Rotation.json",
+    "type": "uoft",
+    "assignTo": "001i-test-security-baseline"
   }
 ]

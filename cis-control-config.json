@@ -442,6 +442,11 @@
       "file": "uoft-policies/001 UOFT Defender Tuning.json",
       "assignTo": "001i-test-security-baseline",
       "rationale": "Post-baseline Defender tuning (archive scanning, cloud protection, etc.); not a CIS control. Hand-built; survives splitter re-runs via this registration."
+    },
+    {
+      "file": "uoft-policies/001 UOFT BitLocker Recovery Rotation.json",
+      "assignTo": "001i-test-security-baseline",
+      "rationale": "Automatic rotation of BitLocker recovery passwords (AAD + Hybrid AAD). CIS v4.0.0 has no equivalent control; UofT-local addition approved by committee 2026-05-11."
     }
   ],
   "serviceControls": {
