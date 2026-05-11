@@ -3,10 +3,22 @@
     Deploys CIS policies to Intune via Graph API using output from split-cis-policies.py.
 
 .DESCRIPTION
-    Creates configuration policies in Intune from policy JSON files. Policies are
-    created without assignments — use a separate assignment workflow to target them.
+    Upserts configuration policies in Intune from policy JSON files. The manifest
+    is the source of truth for both policy body and assignments:
+
+      * If a policy with the same name does not exist, it is CREATED (POST).
+      * If it does exist, the body is wholesale-replaced via PATCH (preserves the
+        GUID, bumps lastModifiedDateTime on every run).
+      * Assignments are ALWAYS reconciled to the manifest's declared set via the
+        /assign action — including clearing to empty when the manifest declares
+        no targets. Portal-only assignments WILL be removed on the next run.
 
     Accepts either a manifest file (deploy all) or individual policy JSON paths.
+
+    Caveat: platforms and technologies are immutable on existing policies. If the
+    manifest's platforms/technologies drift from the tenant copy, PATCH fails with
+    400 and the deploy logs the error and moves on — manual delete-and-rename is
+    the recovery path.
 
     Run split_cis_policies.py first to generate the output directory.
 
@@ -145,11 +157,10 @@ function Resolve-GroupId {
 # Cache of existing configurationPolicies keyed by exact name (one Graph round
 # trip up front instead of N OData $filter calls — the previous per-policy
 # filter silently failed on names containing spaces / parens and produced
-# duplicates).
+# duplicates). Used by the upsert path to decide CREATE vs UPDATE.
 $existingPoliciesByName = @{}
 
 function Initialize-ExistingPolicyCache {
-    if ($WhatIfPreference) { return }
     Write-Host "Fetching existing configuration policies..." -ForegroundColor Gray
     $uri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies?`$select=id,name&`$top=999"
     $count = 0
@@ -179,7 +190,6 @@ function Initialize-ExistingPolicyCache {
 
 function Find-ExistingPolicy {
     param([string]$PolicyName)
-    if ($WhatIfPreference) { return $null }
     if ($existingPoliciesByName.ContainsKey($PolicyName)) {
         return @{ id = $existingPoliciesByName[$PolicyName][0]; name = $PolicyName }
     }
@@ -193,32 +203,43 @@ function New-IntunePolicy {
     $ExcludeGroups = @($ExcludeGroups | Where-Object { $_ })
 
     $policyName = $PolicyBody.name
-    $result = @{ Name = $policyName; Id = $null; Created = $false; Skipped = $false; Assigned = $false; Error = $null }
-
-    if ($WhatIfPreference) {
-        $assignMsg = if ($AssignTo) { " (include: $AssignTo)" } else { "" }
-        if ($ExcludeGroups.Count -gt 0) { $assignMsg += " (exclude: $($ExcludeGroups -join ', '))" }
-        Write-Host "  [WhatIf] Would create: $policyName$assignMsg" -ForegroundColor DarkYellow
-        $result.Id = 'WHATIF-ID'
-        return $result
-    }
+    $result = @{ Name = $policyName; Id = $null; Created = $false; Updated = $false; Assigned = $false; Error = $null }
 
     $existing = Find-ExistingPolicy -PolicyName $policyName
-    if ($existing) {
-        Write-Host "  SKIP (exists): $policyName (ID: $($existing.id))" -ForegroundColor Yellow
-        $result.Id = $existing.id; $result.Skipped = $true
+
+    if ($WhatIfPreference) {
+        $action = if ($existing) { "Would UPDATE" } else { "Would CREATE" }
+        $assignMsg = if ($AssignTo) { " (include: $AssignTo)" } else { "" }
+        if ($ExcludeGroups.Count -gt 0) { $assignMsg += " (exclude: $($ExcludeGroups -join ', '))" }
+        if (-not $AssignTo -and $ExcludeGroups.Count -eq 0) { $assignMsg = " (assignments: cleared)" }
+        Write-Host "  [WhatIf] $action`: $policyName$assignMsg" -ForegroundColor DarkYellow
+        $result.Id = if ($existing) { $existing.id } else { 'WHATIF-ID' }
+        if ($existing) { $result.Updated = $true } else { $result.Created = $true }
         return $result
     }
 
-    try {
-        $body = $PolicyBody | ConvertTo-Json -Depth 30
-        $response = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies" -Body $body -ContentType "application/json"
-        $result.Id = $response.id; $result.Created = $true
-        Write-Host "  CREATED: $policyName (ID: $($response.id))" -ForegroundColor Green
-    } catch {
-        $result.Error = $_.Exception.Message
-        Write-Warning "Failed to create '$policyName': $($_.Exception.Message)"
-        return $result
+    $body = $PolicyBody | ConvertTo-Json -Depth 30
+
+    if ($existing) {
+        try {
+            Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($existing.id)')" -Body $body -ContentType "application/json" | Out-Null
+            $result.Id = $existing.id; $result.Updated = $true
+            Write-Host "  UPDATED: $policyName (ID: $($existing.id))" -ForegroundColor Cyan
+        } catch {
+            $result.Error = $_.Exception.Message
+            Write-Warning "Failed to update '$policyName' (ID: $($existing.id)): $($_.Exception.Message)"
+            return $result
+        }
+    } else {
+        try {
+            $response = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies" -Body $body -ContentType "application/json"
+            $result.Id = $response.id; $result.Created = $true
+            Write-Host "  CREATED: $policyName (ID: $($response.id))" -ForegroundColor Green
+        } catch {
+            $result.Error = $_.Exception.Message
+            Write-Warning "Failed to create '$policyName': $($_.Exception.Message)"
+            return $result
+        }
     }
 
     # Build assignment targets (one include + zero-or-more excludes)
@@ -249,7 +270,7 @@ function New-IntunePolicy {
         }
     }
 
-    if ($result.Id -and $assignmentTargets.Count -gt 0) {
+    if ($result.Id) {
         try {
             $assignBody = @{ assignments = $assignmentTargets }
             Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$($result.Id)')/assign" -Body ($assignBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
@@ -257,6 +278,7 @@ function New-IntunePolicy {
             $assignSummary = @()
             if ($AssignTo) { $assignSummary += "include: $AssignTo" }
             if ($ExcludeGroups.Count -gt 0) { $assignSummary += "exclude: $($ExcludeGroups -join ', ')" }
+            if ($assignmentTargets.Count -eq 0) { $assignSummary += "cleared" }
             Write-Host "  ASSIGNED: $policyName -> $($assignSummary -join '; ')" -ForegroundColor Green
         } catch {
             Write-Warning "Failed to assign '$policyName': $($_.Exception.Message)"
@@ -282,7 +304,10 @@ if (-not $WhatIfPreference) {
     Connect-MgGraph -Scopes $requiredScopes -TenantId $tenantDomain -ContextScope Process -ErrorAction Stop
     Write-Host "Connected as $((Get-MgContext).Account) [$Tenant]" -ForegroundColor Green
 } else {
-    Write-Host "[WhatIf] Would connect to Microsoft Graph ($Tenant`: $tenantDomain)" -ForegroundColor DarkYellow
+    Write-Host "[WhatIf] Connecting read-only to Microsoft Graph ($Tenant`: $tenantDomain) to enumerate existing policies..." -ForegroundColor DarkYellow
+    $requiredScopes = "DeviceManagementConfiguration.Read.All", "Group.Read.All"
+    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+    Connect-MgGraph -Scopes $requiredScopes -TenantId $tenantDomain -ContextScope Process -ErrorAction Stop
 }
 
 Initialize-ExistingPolicyCache
@@ -311,7 +336,7 @@ if (-not $WhatIfPreference) {
 # ---------------------------------------------------------------------------
 # 7. Deploy each policy
 # ---------------------------------------------------------------------------
-$stats = @{ Created = 0; Skipped = 0; Failed = 0 }
+$stats = @{ Created = 0; Updated = 0; Failed = 0 }
 $deploymentLog = [System.Collections.ArrayList]::new()
 
 foreach ($item in $deployItems) {
@@ -332,12 +357,12 @@ foreach ($item in $deployItems) {
     [void]$deploymentLog.Add([ordered]@{
         name = $result.Name; id = $result.Id; file = $item.File
         assignTo = $item.AssignTo; excludeGroups = @($item.ExcludeGroups); created = $result.Created
-        skipped = $result.Skipped; assigned = $result.Assigned; error = $result.Error
+        updated = $result.Updated; assigned = $result.Assigned; error = $result.Error
     })
 
     if ($result.Created) { $stats.Created++ }
-    if ($result.Skipped) { $stats.Skipped++ }
-    if ($result.Error -and -not $result.Created) { $stats.Failed++ }
+    if ($result.Updated) { $stats.Updated++ }
+    if ($result.Error -and -not ($result.Created -or $result.Updated)) { $stats.Failed++ }
 }
 
 # ---------------------------------------------------------------------------
@@ -349,7 +374,7 @@ if (-not $WhatIfPreference -and $deploymentLog.Count -gt 0) {
         deployedAt = (Get-Date -Format 'o')
         deployedBy = $deployedBy
         totalPolicies = $deploymentLog.Count
-        created = $stats.Created; skipped = $stats.Skipped; failed = $stats.Failed
+        created = $stats.Created; updated = $stats.Updated; failed = $stats.Failed
         policies = @($deploymentLog)
     }
     # Write log next to manifest or in current directory
@@ -369,7 +394,7 @@ if (-not $WhatIfPreference -and $deploymentLog.Count -gt 0) {
 
 Write-Host "`n=== Deployment Summary ===" -ForegroundColor White
 Write-Host "  Created:    $($stats.Created)" -ForegroundColor Green
-Write-Host "  Skipped:    $($stats.Skipped) (already exist)" -ForegroundColor Yellow
+Write-Host "  Updated:    $($stats.Updated)" -ForegroundColor Cyan
 Write-Host "  Failed:     $($stats.Failed)" -ForegroundColor $(if ($stats.Failed -gt 0) { 'Red' } else { 'Gray' })
 $assigned = @($deploymentLog | Where-Object { $_.assigned }).Count
 Write-Host "  Assigned:   $assigned" -ForegroundColor $(if ($assigned -gt 0) { 'Cyan' } else { 'Gray' })
